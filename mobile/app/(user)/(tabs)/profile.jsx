@@ -16,8 +16,8 @@ import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
-import { useTheme } from '../../../../constants/ThemeContext';
-import { API_URL } from '../../../../constants/Config';
+import { useTheme } from '../../../constants/ThemeContext';
+import { API_URL } from '../../../constants/Config';
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
 const GENDERS = ['Male', 'Female', 'Other'];
