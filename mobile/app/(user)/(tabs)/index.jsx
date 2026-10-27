@@ -13,7 +13,8 @@ import {
     ActivityIndicator,
     Animated,
     Platform,
-    BackHandler
+    BackHandler,
+    StatusBar
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { darkTheme } from '../../../constants/ThemeContext';
@@ -119,7 +120,7 @@ const UserDashboard = () => {
         return () => sub.remove();
     }, [scanning]);
 
-    // Hide tab navigation header and tab bar when scanning to make it true fullscreen!
+    // Fullscreen scanner: dynamically hide the tab header and tab bar like GPay
     useEffect(() => {
         navigation.setOptions({
             headerShown: !scanning,
@@ -133,6 +134,18 @@ const UserDashboard = () => {
                     paddingTop: 4,
                 },
         });
+        return () => {
+            navigation.setOptions({
+                headerShown: true,
+                tabBarStyle: {
+                    backgroundColor: colors.background,
+                    borderTopColor: colors.border,
+                    height: 60,
+                    paddingBottom: 6,
+                    paddingTop: 4,
+                },
+            });
+        };
     }, [scanning, navigation, colors]);
 
     const fetchData = async () => {
@@ -656,6 +669,8 @@ const UserDashboard = () => {
            ========================================================================= */}
         {scanning && (
             <View style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999, backgroundColor: '#000000' }]}>
+                <StatusBar barStyle="light-content" backgroundColor="#000000" translucent />
+
                 {/* Live Camera Feed */}
                 <CameraView
                     style={StyleSheet.absoluteFill}
@@ -667,56 +682,57 @@ const UserDashboard = () => {
                     onBarcodeScanned={scannedRef.current ? undefined : handleBarCodeScanned}
                 />
 
-                {/* Translucent overlay with centered viewfinder reticle */}
-                <View style={styles.scannerOverlay}>
-                    {/* Centered Reticle Viewfinder (Dead Center on Screen!) */}
-                    <View style={styles.centeredReticleContainer} pointerEvents="box-none">
-                        <View style={styles.viewfinder}>
-                            {/* Corner Accents */}
-                            <View style={[styles.corner, styles.cornerTL]} />
-                            <View style={[styles.corner, styles.cornerTR]} />
-                            <View style={[styles.corner, styles.cornerBL]} />
-                            <View style={[styles.corner, styles.cornerBR]} />
+                {/* 1. Top Header Bar (pinned to top) */}
+                <View style={styles.scannerHeader}>
+                    <Pressable style={styles.scannerIconButton} onPress={() => setScanning(false)}>
+                        <Ionicons name="close" size={26} color="#FFFFFF" />
+                    </Pressable>
+                    <Text style={styles.scannerHeaderTitle}>Scan to Check-In</Text>
+                    <Pressable style={styles.scannerIconButton} onPress={() => setTorchOn(prev => !prev)}>
+                        <Ionicons name={torchOn ? "flash" : "flash-off"} size={22} color={torchOn ? colors.primary : "#FFFFFF"} />
+                    </Pressable>
+                </View>
 
-                            {/* Moving Laser Scan Line */}
-                            <Animated.View
-                                style={[
-                                    styles.laserLine,
-                                    {
-                                        transform: [{ translateY: scanLineAnim }]
-                                    }
-                                ]}
-                            />
-                        </View>
+                {/* 2. Interactive Reticle Viewfinder (DEAD CENTER of screen!) */}
+                <View style={styles.centeredReticleWrapper} pointerEvents="box-none">
+                    <View style={styles.viewfinder}>
+                        {/* Corner Accents */}
+                        <View style={[styles.corner, styles.cornerTL]} />
+                        <View style={[styles.corner, styles.cornerTR]} />
+                        <View style={[styles.corner, styles.cornerBL]} />
+                        <View style={[styles.corner, styles.cornerBR]} />
+
+                        {/* Moving Laser Scan Line */}
+                        <Animated.View
+                            style={[
+                                styles.laserLine,
+                                {
+                                    transform: [{ translateY: scanLineAnim }]
+                                }
+                            ]}
+                        />
+                    </View>
+
+                    {/* Instruction pill floating right below the reticle */}
+                    <View style={styles.instructionWrap}>
                         <Text style={styles.scannerInstruction}>
                             Align gym QR code within the frame
                         </Text>
                     </View>
+                </View>
 
-                    {/* Top Header Bar */}
-                    <View style={styles.scannerHeader}>
-                        <Pressable style={styles.scannerIconButton} onPress={() => setScanning(false)}>
-                            <Ionicons name="close" size={26} color="#FFFFFF" />
-                        </Pressable>
-                        <Text style={styles.scannerHeaderTitle}>Scan to Check-In</Text>
-                        <Pressable style={styles.scannerIconButton} onPress={() => setTorchOn(prev => !prev)}>
-                            <Ionicons name={torchOn ? "flash" : "flash-off"} size={22} color={torchOn ? colors.primary : "#FFFFFF"} />
-                        </Pressable>
-                    </View>
-
-                    {/* Bottom Actions Overlay */}
-                    <View style={styles.scannerBottom}>
-                        <Pressable
-                            style={styles.manualCodeBtn}
-                            onPress={() => {
-                                setScanning(false);
-                                setTimeout(() => setShowCodeModal(true), 300);
-                            }}
-                        >
-                            <Ionicons name="keypad-outline" size={20} color="#000000" />
-                            <Text style={styles.manualCodeBtnText}>Enter Access Code Manually</Text>
-                        </Pressable>
-                    </View>
+                {/* 3. Bottom Actions Overlay (pinned to bottom) */}
+                <View style={styles.scannerBottom}>
+                    <Pressable
+                        style={styles.manualCodeBtn}
+                        onPress={() => {
+                            setScanning(false);
+                            setTimeout(() => setShowCodeModal(true), 300);
+                        }}
+                    >
+                        <Ionicons name="keypad-outline" size={20} color="#000000" />
+                        <Text style={styles.manualCodeBtnText}>Enter Access Code Manually</Text>
+                    </Pressable>
                 </View>
             </View>
         )}
@@ -1103,93 +1119,15 @@ const getStyles = (colors) => StyleSheet.create({
         flex: 1,
         backgroundColor: '#000000',
     },
-    scannerOverlay: {
-        ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'transparent',
-    },
-    centeredReticleContainer: {
-        ...StyleSheet.absoluteFillObject,
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 1,
-    },
-    viewfinder: {
-        width: 270,
-        height: 270,
-        position: 'relative',
-        borderRadius: 20,
-        overflow: 'hidden',
-        backgroundColor: 'transparent',
-    },
-    corner: {
-        position: 'absolute',
-        width: 32,
-        height: 32,
-        borderColor: colors.primary,
-    },
-    cornerTL: {
-        top: 0,
-        left: 0,
-        borderTopWidth: 4,
-        borderLeftWidth: 4,
-        borderTopLeftRadius: 16,
-    },
-    cornerTR: {
-        top: 0,
-        right: 0,
-        borderTopWidth: 4,
-        borderRightWidth: 4,
-        borderTopRightRadius: 16,
-    },
-    cornerBL: {
-        bottom: 0,
-        left: 0,
-        borderBottomWidth: 4,
-        borderLeftWidth: 4,
-        borderBottomLeftRadius: 16,
-    },
-    cornerBR: {
-        bottom: 0,
-        right: 0,
-        borderBottomWidth: 4,
-        borderRightWidth: 4,
-        borderBottomRightRadius: 16,
-    },
-    laserLine: {
-        height: 3,
-        width: '100%',
-        backgroundColor: colors.primary,
-        shadowColor: colors.primary,
-        shadowOffset: { width: 0, height: 0 },
-        shadowOpacity: 0.9,
-        shadowRadius: 10,
-        elevation: 6,
-    },
-    scannerInstruction: {
-        position: 'absolute',
-        top: '50%',
-        marginTop: 155,
-        color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '600',
-        textAlign: 'center',
-        backgroundColor: 'rgba(0,0,0,0.65)',
-        paddingHorizontal: 18,
-        paddingVertical: 9,
-        borderRadius: 20,
-        overflow: 'hidden',
-    },
     scannerHeader: {
         position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        zIndex: 10,
+        top: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 50,
+        left: 20,
+        right: 20,
+        zIndex: 20,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 20,
-        paddingTop: Platform.OS === 'android' ? 50 : 60,
     },
     scannerIconButton: {
         width: 44,
@@ -1205,14 +1143,86 @@ const getStyles = (colors) => StyleSheet.create({
         fontWeight: 'bold',
         letterSpacing: 0.5,
     },
-    scannerBottom: {
+    centeredReticleWrapper: {
+        ...StyleSheet.absoluteFillObject,
+        justifyContent: 'center',
+        alignItems: 'center',
+        zIndex: 10,
+    },
+    viewfinder: {
+        width: 260,
+        height: 260,
+        position: 'relative',
+        borderRadius: 20,
+        overflow: 'hidden',
+        backgroundColor: 'transparent',
+    },
+    corner: {
         position: 'absolute',
+        width: 36,
+        height: 36,
+        borderColor: colors.primary,
+    },
+    cornerTL: {
+        top: 0,
+        left: 0,
+        borderTopWidth: 4,
+        borderLeftWidth: 4,
+        borderTopLeftRadius: 18,
+    },
+    cornerTR: {
+        top: 0,
+        right: 0,
+        borderTopWidth: 4,
+        borderRightWidth: 4,
+        borderTopRightRadius: 18,
+    },
+    cornerBL: {
         bottom: 0,
         left: 0,
+        borderBottomWidth: 4,
+        borderLeftWidth: 4,
+        borderBottomLeftRadius: 18,
+    },
+    cornerBR: {
+        bottom: 0,
         right: 0,
-        zIndex: 10,
+        borderBottomWidth: 4,
+        borderRightWidth: 4,
+        borderBottomRightRadius: 18,
+    },
+    laserLine: {
+        height: 3,
+        width: '100%',
+        backgroundColor: colors.primary,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 10,
+        elevation: 6,
+    },
+    instructionWrap: {
+        marginTop: 22,
         alignItems: 'center',
-        paddingBottom: Platform.OS === 'android' ? 40 : 50,
+    },
+    scannerInstruction: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
+        textAlign: 'center',
+        backgroundColor: 'rgba(0,0,0,0.65)',
+        paddingHorizontal: 18,
+        paddingVertical: 9,
+        borderRadius: 20,
+        overflow: 'hidden',
+    },
+    scannerBottom: {
+        position: 'absolute',
+        bottom: Platform.OS === 'android' ? 36 : 48,
+        left: 0,
+        right: 0,
+        alignItems: 'center',
+        zIndex: 20,
     },
     manualCodeBtn: {
         flexDirection: 'row',
