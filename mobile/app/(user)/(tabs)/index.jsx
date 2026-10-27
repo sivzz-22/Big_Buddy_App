@@ -20,7 +20,7 @@ import { darkTheme } from '../../../constants/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_URL } from '../../../constants/Config';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useNavigation } from 'expo-router';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 import { Calendar } from 'react-native-calendars';
 import { CameraView, useCameraPermissions } from 'expo-camera';
@@ -42,6 +42,7 @@ const getSubStatus = (member) => {
 };
 
 const UserDashboard = () => {
+    const navigation = useNavigation();
     // Force pure dark theme on user side
     const colors = darkTheme;
 
@@ -90,7 +91,7 @@ const UserDashboard = () => {
             anim = Animated.loop(
                 Animated.sequence([
                     Animated.timing(scanLineAnim, {
-                        toValue: 210,
+                        toValue: 240,
                         duration: 1800,
                         useNativeDriver: true,
                     }),
@@ -117,6 +118,22 @@ const UserDashboard = () => {
         });
         return () => sub.remove();
     }, [scanning]);
+
+    // Hide tab navigation header and tab bar when scanning to make it true fullscreen!
+    useEffect(() => {
+        navigation.setOptions({
+            headerShown: !scanning,
+            tabBarStyle: scanning
+                ? { display: 'none' }
+                : {
+                    backgroundColor: colors.background,
+                    borderTopColor: colors.border,
+                    height: 60,
+                    paddingBottom: 6,
+                    paddingTop: 4,
+                },
+        });
+    }, [scanning, navigation, colors]);
 
     const fetchData = async () => {
         try {
@@ -652,19 +669,8 @@ const UserDashboard = () => {
 
                 {/* Translucent overlay with centered viewfinder reticle */}
                 <View style={styles.scannerOverlay}>
-                    {/* Top Header Bar */}
-                    <View style={styles.scannerHeader}>
-                        <Pressable style={styles.scannerIconButton} onPress={() => setScanning(false)}>
-                            <Ionicons name="close" size={26} color="#FFFFFF" />
-                        </Pressable>
-                        <Text style={styles.scannerHeaderTitle}>Scan to Check-In</Text>
-                        <Pressable style={styles.scannerIconButton} onPress={() => setTorchOn(prev => !prev)}>
-                            <Ionicons name={torchOn ? "flash" : "flash-off"} size={22} color={torchOn ? colors.primary : "#FFFFFF"} />
-                        </Pressable>
-                    </View>
-
-                    {/* Interactive Reticle Viewfinder (Centered!) */}
-                    <View style={styles.scannerCenter}>
+                    {/* Centered Reticle Viewfinder (Dead Center on Screen!) */}
+                    <View style={styles.centeredReticleContainer} pointerEvents="box-none">
                         <View style={styles.viewfinder}>
                             {/* Corner Accents */}
                             <View style={[styles.corner, styles.cornerTL]} />
@@ -685,6 +691,17 @@ const UserDashboard = () => {
                         <Text style={styles.scannerInstruction}>
                             Align gym QR code within the frame
                         </Text>
+                    </View>
+
+                    {/* Top Header Bar */}
+                    <View style={styles.scannerHeader}>
+                        <Pressable style={styles.scannerIconButton} onPress={() => setScanning(false)}>
+                            <Ionicons name="close" size={26} color="#FFFFFF" />
+                        </Pressable>
+                        <Text style={styles.scannerHeaderTitle}>Scan to Check-In</Text>
+                        <Pressable style={styles.scannerIconButton} onPress={() => setTorchOn(prev => !prev)}>
+                            <Ionicons name={torchOn ? "flash" : "flash-off"} size={22} color={torchOn ? colors.primary : "#FFFFFF"} />
+                        </Pressable>
                     </View>
 
                     {/* Bottom Actions Overlay */}
@@ -1088,43 +1105,17 @@ const getStyles = (colors) => StyleSheet.create({
     },
     scannerOverlay: {
         ...StyleSheet.absoluteFillObject,
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        paddingHorizontal: 20,
-        paddingTop: Platform.OS === 'android' ? 50 : 60,
-        paddingBottom: 40,
         backgroundColor: 'transparent',
     },
-    scannerHeader: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        justifyContent: 'space-between',
-        width: '100%',
-        paddingHorizontal: 4,
-    },
-    scannerIconButton: {
-        width: 44,
-        height: 44,
-        borderRadius: 22,
-        backgroundColor: 'rgba(0,0,0,0.65)',
+    centeredReticleContainer: {
+        ...StyleSheet.absoluteFillObject,
         justifyContent: 'center',
         alignItems: 'center',
-    },
-    scannerHeaderTitle: {
-        color: '#FFFFFF',
-        fontSize: 18,
-        fontWeight: 'bold',
-        letterSpacing: 0.5,
-    },
-    scannerCenter: {
-        flex: 1,
-        justifyContent: 'center',
-        alignItems: 'center',
-        width: '100%',
+        zIndex: 1,
     },
     viewfinder: {
-        width: 260,
-        height: 260,
+        width: 270,
+        height: 270,
         position: 'relative',
         borderRadius: 20,
         overflow: 'hidden',
@@ -1175,10 +1166,12 @@ const getStyles = (colors) => StyleSheet.create({
         elevation: 6,
     },
     scannerInstruction: {
+        position: 'absolute',
+        top: '50%',
+        marginTop: 155,
         color: '#FFFFFF',
         fontSize: 14,
         fontWeight: '600',
-        marginTop: 24,
         textAlign: 'center',
         backgroundColor: 'rgba(0,0,0,0.65)',
         paddingHorizontal: 18,
@@ -1186,10 +1179,40 @@ const getStyles = (colors) => StyleSheet.create({
         borderRadius: 20,
         overflow: 'hidden',
     },
-    scannerBottom: {
-        width: '100%',
+    scannerHeader: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+        flexDirection: 'row',
         alignItems: 'center',
-        paddingBottom: 20,
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingTop: Platform.OS === 'android' ? 50 : 60,
+    },
+    scannerIconButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.65)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scannerHeaderTitle: {
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: 'bold',
+        letterSpacing: 0.5,
+    },
+    scannerBottom: {
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 10,
+        alignItems: 'center',
+        paddingBottom: Platform.OS === 'android' ? 40 : 50,
     },
     manualCodeBtn: {
         flexDirection: 'row',
@@ -1199,7 +1222,7 @@ const getStyles = (colors) => StyleSheet.create({
         paddingHorizontal: 24,
         paddingVertical: 14,
         borderRadius: 24,
-        elevation: 4,
+        elevation: 6,
     },
     manualCodeBtnText: {
         color: colors.buttonPrimaryText,
