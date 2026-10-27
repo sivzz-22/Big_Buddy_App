@@ -6,11 +6,21 @@ import { useTheme } from '../constants/ThemeContext';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_URL, GOOGLE_WEB_CLIENT_ID } from '../constants/Config';
-import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';
 
-GoogleSignin.configure({
-  webClientId: GOOGLE_WEB_CLIENT_ID,
-});
+let GoogleSignin = null;
+let statusCodes = {};
+try {
+  const gModule = require('@react-native-google-signin/google-signin');
+  GoogleSignin = gModule.GoogleSignin;
+  statusCodes = gModule.statusCodes || {};
+  if (GoogleSignin?.configure) {
+    GoogleSignin.configure({
+      webClientId: GOOGLE_WEB_CLIENT_ID,
+    });
+  }
+} catch (e) {
+  // RNGoogleSignin native module is not present in Expo Go
+}
 
 
 const Signup = () => {
@@ -56,6 +66,13 @@ const Signup = () => {
     };
 
     const handleGoogleSignup = async () => {
+        if (!GoogleSignin) {
+            Alert.alert(
+                "Notice",
+                "Google Sign-In requires a custom native build (it is not supported inside Expo Go). Please sign up with your email and password."
+            );
+            return;
+        }
         setLoading(true);
         try {
             await GoogleSignin.hasPlayServices();

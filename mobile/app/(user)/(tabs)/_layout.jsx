@@ -175,7 +175,8 @@ export default function UserTabLayout() {
                 options={{
                     title: 'Inbox',
                     headerTitle: 'INBOX',
-                    href: null, // hide from bottom tab bar
+                    tabBarButton: () => null,
+                    tabBarItemStyle: { display: 'none' },
                 }}
                 listeners={{
                     // When inbox screen comes into focus, re-fetch unread after a short delay

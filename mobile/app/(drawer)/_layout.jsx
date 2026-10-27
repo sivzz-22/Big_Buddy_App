@@ -1,7 +1,7 @@
 
 import { Drawer } from 'expo-router/drawer';
 import { View, Text, StyleSheet, Pressable, Switch } from 'react-native';
-import { DrawerContentScrollView, DrawerItemList, DrawerItem } from '@react-navigation/drawer';
+import { DrawerContentScrollView } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState, useEffect } from 'react';
@@ -9,6 +9,27 @@ import React, { useState, useEffect } from 'react';
 import { useTheme } from '../../constants/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+
+function DrawerItemRow({ label, icon, onPress, colors }) {
+    return (
+        <Pressable
+            onPress={onPress}
+            style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                marginHorizontal: 10,
+                borderRadius: 8,
+                backgroundColor: pressed ? (colors.primary + '20') : 'transparent',
+                gap: 16,
+            })}
+        >
+            <Ionicons name={icon} size={22} color={colors.secondary} />
+            <Text style={{ color: colors.secondary, fontSize: 15, fontWeight: '500' }}>{label}</Text>
+        </Pressable>
+    );
+}
 
 function CustomDrawerContent(props) {
     const { colors, isDarkMode, toggleTheme } = useTheme();
@@ -45,7 +66,7 @@ function CustomDrawerContent(props) {
 
     return (
         <DrawerContentScrollView {...props} style={{ backgroundColor: colors.surface }} contentContainerStyle={styles.drawerContent}>
-            <Pressable onPress={() => router.push('/(tabs)/profile')}>
+            <Pressable onPress={() => router.push('/(drawer)/(tabs)/profile')}>
                 <View style={styles.header}>
                     <View style={styles.avatar}>
                         <Text style={styles.avatarText}>{userData?.name ? userData.name.charAt(0).toUpperCase() : 'A'}</Text>
@@ -57,36 +78,43 @@ function CustomDrawerContent(props) {
             </Pressable>
 
             <View style={styles.itemsContainer}>
-                <DrawerItemList {...props} />
+                <DrawerItemRow
+                    key="profile"
+                    label="Gym Profile"
+                    icon="business-outline"
+                    onPress={() => router.push('/(drawer)/(tabs)/profile')}
+                    colors={colors}
+                />
+                <DrawerItemRow
+                    key="dashboard"
+                    label="Dashboard"
+                    icon="home-outline"
+                    onPress={() => router.push('/(drawer)/(tabs)')}
+                    colors={colors}
+                />
 
                 <View key="sep1" style={styles.separator} />
 
-                <DrawerItem
+                <DrawerItemRow
                     key="membership"
                     label="Membership Plans"
-                    labelStyle={styles.itemLabel}
-                    icon={({ size }) => <Ionicons name="card-outline" size={size} color={colors.secondary} />}
-                    onPress={() => { router.push('/membership-plans') }}
-                    activeTintColor={colors.primary}
-                    inactiveTintColor={colors.secondary}
+                    icon="card-outline"
+                    onPress={() => router.push('/membership-plans')}
+                    colors={colors}
                 />
-                <DrawerItem
+                <DrawerItemRow
                     key="workout"
                     label="Workout Plans"
-                    labelStyle={styles.itemLabel}
-                    icon={({ size }) => <Ionicons name="barbell-outline" size={size} color={colors.secondary} />}
-                    onPress={() => { router.push('/workout-plans') }}
-                    activeTintColor={colors.primary}
-                    inactiveTintColor={colors.secondary}
+                    icon="barbell-outline"
+                    onPress={() => router.push('/workout-plans')}
+                    colors={colors}
                 />
-                <DrawerItem
+                <DrawerItemRow
                     key="diet"
                     label="Diet Plans"
-                    labelStyle={styles.itemLabel}
-                    icon={({ size }) => <Ionicons name="restaurant-outline" size={size} color={colors.secondary} />}
-                    onPress={() => { router.push('/diet-plans') }}
-                    activeTintColor={colors.primary}
-                    inactiveTintColor={colors.secondary}
+                    icon="restaurant-outline"
+                    onPress={() => router.push('/diet-plans')}
+                    colors={colors}
                 />
 
                 <View key="sep2" style={styles.separator} />

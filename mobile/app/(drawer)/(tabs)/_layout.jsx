@@ -119,7 +119,8 @@ export default function TabLayout() {
                 options={{
                     title: 'Profile',
                     headerTitle: 'Admin Profile',
-                    href: null,
+                    tabBarButton: () => null,
+                    tabBarItemStyle: { display: 'none' },
                 }}
             />
         </Tabs>

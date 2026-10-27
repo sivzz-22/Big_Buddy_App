@@ -8,7 +8,7 @@ import { useTheme } from '../../../constants/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_URL } from '../../../constants/Config';
-import { useFocusEffect } from '@react-navigation/native';
+import { useFocusEffect } from 'expo-router';
 
 const TYPE_COLORS = {
     expired: '#F44336',

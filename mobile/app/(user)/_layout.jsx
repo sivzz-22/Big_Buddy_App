@@ -1,12 +1,33 @@
 import { Drawer } from 'expo-router/drawer';
 import { View, Text, StyleSheet, Pressable, Switch } from 'react-native';
-import { DrawerContentScrollView, DrawerItemList, DrawerItem } from '@react-navigation/drawer';
+import { DrawerContentScrollView } from '@react-navigation/drawer';
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState, useEffect } from 'react';
 
 import { useTheme } from '../../constants/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+
+function DrawerItemRow({ label, icon, onPress, colors }) {
+    return (
+        <Pressable
+            onPress={onPress}
+            style={({ pressed }) => ({
+                flexDirection: 'row',
+                alignItems: 'center',
+                paddingVertical: 12,
+                paddingHorizontal: 16,
+                marginHorizontal: 10,
+                borderRadius: 8,
+                backgroundColor: pressed ? (colors.primary + '20') : 'transparent',
+                gap: 16,
+            })}
+        >
+            <Ionicons name={icon} size={22} color={colors.secondary} />
+            <Text style={{ color: colors.secondary, fontSize: 15, fontWeight: '500' }}>{label}</Text>
+        </Pressable>
+    );
+}
 
 function CustomUserDrawerContent(props) {
     const { colors, isDarkMode, toggleTheme } = useTheme();
@@ -49,7 +70,20 @@ function CustomUserDrawerContent(props) {
             </View>
 
             <View style={styles.itemsContainer}>
-                <DrawerItemList {...props} />
+                <DrawerItemRow
+                    key="home"
+                    label="Home"
+                    icon="home-outline"
+                    onPress={() => router.push('/(user)/(tabs)')}
+                    colors={colors}
+                />
+                <DrawerItemRow
+                    key="inbox"
+                    label="Inbox"
+                    icon="mail-outline"
+                    onPress={() => router.push('/(user)/(tabs)/inbox')}
+                    colors={colors}
+                />
                 
                 <View style={styles.separator} />
                 

@@ -1,9 +1,8 @@
 import { View, Text, FlatList, StyleSheet, Pressable, TextInput, Modal, Alert, ActivityIndicator } from 'react-native';
 import { useTheme } from '../../../constants/ThemeContext';
 import { useState, useEffect, useCallback } from 'react';
-import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useNavigation, router } from 'expo-router';
+import { useLocalSearchParams, useNavigation, router, useFocusEffect } from 'expo-router';
 import axios from 'axios';
 import { API_URL } from '../../../constants/Config';
 import { Image } from 'react-native';
