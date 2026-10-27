@@ -1,12 +1,28 @@
-import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, RefreshControl, TextInput, Modal, Alert, ActivityIndicator } from 'react-native';
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import {
+    View,
+    Text,
+    StyleSheet,
+    ScrollView,
+    Pressable,
+    Dimensions,
+    RefreshControl,
+    TextInput,
+    Modal,
+    Alert,
+    ActivityIndicator,
+    Animated,
+    Platform
+} from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useTheme } from '../../../constants/ThemeContext';
+import { darkTheme } from '../../../constants/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_URL } from '../../../constants/Config';
 import { router, useFocusEffect } from 'expo-router';
 import { LineChart, BarChart } from 'react-native-chart-kit';
+import { Calendar } from 'react-native-calendars';
+import { CameraView, useCameraPermissions } from 'expo-camera';
 
 const { width } = Dimensions.get('window');
 const CHART_WIDTH = width - 70;
@@ -25,21 +41,38 @@ const getSubStatus = (member) => {
 };
 
 const UserDashboard = () => {
-    const { colors } = useTheme();
+    // Force pure dark theme on user side
+    const colors = darkTheme;
+
     const [userData, setUserData] = useState(null);
     const [memberData, setMemberData] = useState(null);
     const [attendanceStats, setAttendanceStats] = useState({ present: 0, total: 25, streak: 0 });
+    const [attendanceMarkedDates, setAttendanceMarkedDates] = useState({});
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
+
+    // Metrics modal
     const [metricsModalVisible, setMetricsModalVisible] = useState(false);
     const [todayMetrics, setTodayMetrics] = useState({ weight: '', waterIntake: '', steps: '', mood: 'Good' });
     const [historyLogs, setHistoryLogs] = useState([]);
     const [savingMetrics, setSavingMetrics] = useState(false);
 
-    const today = new Date().toISOString().split('T')[0];
-    const styles = getStyles(colors);
+    // Fullscreen interactive QR scanner & Access Code states
+    const [scanning, setScanning] = useState(false);
+    const [torchOn, setTorchOn] = useState(false);
+    const [showCodeModal, setShowCodeModal] = useState(false);
+    const [accessCode, setAccessCode] = useState('');
+    const [marking, setMarking] = useState(false);
+    const [permission, requestPermission] = useCameraPermissions();
+    const scannedRef = useRef(false);
 
-    // Compute profile completeness (essential details filled by member)
+    // Animated scanner laser line
+    const scanLineAnim = useRef(new Animated.Value(0)).current;
+
+    const today = new Date().toISOString().split('T')[0];
+    const isTodayMarked = Boolean(attendanceMarkedDates[today]);
+
+    // Profile completeness check
     const isProfileComplete = Boolean(
         memberData?.email && memberData.email.trim() !== '' &&
         memberData?.dob && memberData.dob.trim() !== '' &&
@@ -48,9 +81,36 @@ const UserDashboard = () => {
         memberData?.address && memberData.address.trim() !== ''
     );
 
+    // Loop scan line animation when camera is open
+    useEffect(() => {
+        let anim;
+        if (scanning) {
+            scanLineAnim.setValue(0);
+            anim = Animated.loop(
+                Animated.sequence([
+                    Animated.timing(scanLineAnim, {
+                        toValue: 210,
+                        duration: 1800,
+                        useNativeDriver: true,
+                    }),
+                    Animated.timing(scanLineAnim, {
+                        toValue: 0,
+                        duration: 1800,
+                        useNativeDriver: true,
+                    }),
+                ])
+            );
+            anim.start();
+        }
+        return () => {
+            if (anim) anim.stop();
+        };
+    }, [scanning]);
+
     const fetchData = async () => {
         try {
             const userJson = await AsyncStorage.getItem('userData');
+            if (!userJson) return;
             const user = JSON.parse(userJson);
             setUserData(user);
 
@@ -59,8 +119,11 @@ const UserDashboard = () => {
             const memberDoc = memberRes.data;
             setMemberData(memberDoc);
 
+            // Fetch Attendance
             const attRes = await axios.get(`${API_URL}/attendance?memberId=${memberDoc._id}`);
-            const logs = attRes.data;
+            const logs = attRes.data || [];
+
+            // Calculate streak
             let streak = 0;
             const sorted = [...logs].sort((a, b) => new Date(b.date) - new Date(a.date));
             const yesterday = new Date(Date.now() - 86400000).toISOString().split('T')[0];
@@ -75,9 +138,23 @@ const UserDashboard = () => {
             }
             setAttendanceStats({ present: logs.length, total: 25, streak });
 
+            // Build marked dates for Calendar
+            const marked = {};
+            logs.forEach(att => {
+                marked[att.date] = {
+                    selected: true,
+                    marked: true,
+                    selectedColor: colors.primary,
+                    dotColor: '#000000',
+                };
+            });
+            setAttendanceMarkedDates(marked);
+
+            // Daily logs history
             const histRes = await axios.get(`${API_URL}/daily-logs/history/${memberDoc._id}?limit=14`);
             setHistoryLogs([...histRes.data].sort((a, b) => new Date(a.date) - new Date(b.date)));
 
+            // Today's metrics
             const todayLog = await axios.get(`${API_URL}/daily-logs?memberId=${memberDoc._id}&date=${today}`);
             if (todayLog.data?.metrics) {
                 const m = todayLog.data.metrics;
@@ -96,7 +173,9 @@ const UserDashboard = () => {
         }
     };
 
-    useEffect(() => { fetchData(); }, []);
+    useEffect(() => {
+        fetchData();
+    }, []);
 
     useFocusEffect(
         useCallback(() => {
@@ -104,9 +183,13 @@ const UserDashboard = () => {
         }, [])
     );
 
-    const onRefresh = () => { setRefreshing(true); fetchData(); };
+    const onRefresh = () => {
+        setRefreshing(true);
+        fetchData();
+    };
 
-    const handleCheckIn = () => {
+    // Check-In button click: opens fullscreen GPay-style camera scanner
+    const handleCheckIn = async () => {
         if (!isProfileComplete) {
             Alert.alert(
                 "Profile Incomplete",
@@ -118,9 +201,83 @@ const UserDashboard = () => {
             );
             return;
         }
-        router.push('/(user)/(tabs)/attendance');
+
+        if (isTodayMarked) {
+            Alert.alert("Already Checked In", "You have already marked your attendance for today! Keep up the great work. 🔥");
+            return;
+        }
+
+        if (!permission?.granted) {
+            const { granted } = await requestPermission();
+            if (!granted) {
+                Alert.alert(
+                    "Camera Permission",
+                    "Camera access is required to scan the gym check-in QR code.",
+                    [
+                        { text: "Cancel", style: "cancel" },
+                        { text: "Enter Code Manually", onPress: () => setShowCodeModal(true) }
+                    ]
+                );
+                return;
+            }
+        }
+
+        scannedRef.current = false;
+        setScanning(true);
     };
 
+    // When QR code is scanned: automatically close scanner and return to Enter Access Code modal
+    const handleBarCodeScanned = ({ data }) => {
+        if (scannedRef.current) return;
+        scannedRef.current = true;
+
+        // Auto-close scanner modal like GPay
+        setScanning(false);
+
+        // Immediate transition to Access Code popup
+        setTimeout(() => {
+            setShowCodeModal(true);
+            scannedRef.current = false;
+        }, 300);
+    };
+
+    // Verify Access Code and mark attendance
+    const handleVerifyAndMark = async () => {
+        if (!accessCode || accessCode.trim().length === 0) {
+            Alert.alert("Access Code Required", "Please enter the daily access code displayed at the gym.");
+            return;
+        }
+
+        if (attendanceMarkedDates[today]) {
+            Alert.alert("Already Marked", "You have already marked your attendance for today.");
+            setShowCodeModal(false);
+            setAccessCode('');
+            return;
+        }
+
+        setMarking(true);
+        try {
+            const hours = new Date().getHours();
+            const session = hours < 12 ? 'Morning' : 'Evening';
+
+            await axios.post(`${API_URL}/attendance`, {
+                memberId: memberData._id,
+                session: session,
+                accessCode: accessCode.trim()
+            });
+
+            Alert.alert("Success! 🎉", "Your attendance has been marked successfully!");
+            setShowCodeModal(false);
+            setAccessCode('');
+            fetchData();
+        } catch (error) {
+            Alert.alert("Verification Failed", error.response?.data?.message || "Invalid access code. Please check the screen at gym reception.");
+        } finally {
+            setMarking(false);
+        }
+    };
+
+    // Open Metrics logging modal
     const handleOpenMetrics = () => {
         if (!isProfileComplete) {
             Alert.alert(
@@ -149,11 +306,11 @@ const UserDashboard = () => {
                     mood: todayMetrics.mood
                 }
             });
-            Alert.alert("Saved!", "Today's metrics logged successfully.");
+            Alert.alert("Saved! 🎯", "Today's metrics logged successfully.");
             setMetricsModalVisible(false);
             fetchData();
         } catch (e) {
-            Alert.alert("Error", "Could not save metrics.");
+            Alert.alert("Error", "Could not save metrics. Please try again.");
         } finally {
             setSavingMetrics(false);
         }
@@ -188,7 +345,6 @@ const UserDashboard = () => {
         }]
     };
 
-    // Metrics chart — weight + steps
     const weightData = historyLogs.filter(l => l.metrics?.weight > 0);
     const weightChartData = {
         labels: weightData.slice(-7).map(l => l.date?.slice(5) || ''),
@@ -221,6 +377,8 @@ const UserDashboard = () => {
     const MOODS = ['Great', 'Good', 'Okay', 'Tired', 'Bad'];
     const moodEmoji = { 'Great': '🔥', 'Good': '😊', 'Okay': '😐', 'Tired': '😴', 'Bad': '😞' };
 
+    const styles = getStyles(colors);
+
     if (loading) {
         return (
             <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
@@ -238,7 +396,7 @@ const UserDashboard = () => {
             {/* Header */}
             <View style={styles.header}>
                 <View>
-                    <Text style={styles.greeting}>Hello,</Text>
+                    <Text style={styles.greeting}>Welcome back,</Text>
                     <Text style={styles.userName}>{userData?.name || 'Warrior'} 💪</Text>
                 </View>
                 <View style={[styles.statusBadge, { borderColor: subStatus.color + '50' }]}>
@@ -247,12 +405,12 @@ const UserDashboard = () => {
                 </View>
             </View>
 
-            {/* Stats Row */}
+            {/* Stats Row — with Days Present */}
             <View style={styles.statsContainer}>
                 <View style={styles.statBox}>
-                    <Text style={styles.statLabel}>Monthly Presence</Text>
-                    <Text style={styles.statValue}>{attendanceStats.present}<Text style={styles.statDen}>/{attendanceStats.total}</Text></Text>
-                    <Text style={styles.statSub}>Days</Text>
+                    <Text style={styles.statLabel}>Days Present</Text>
+                    <Text style={styles.statValue}>{attendanceStats.present}</Text>
+                    <Text style={styles.statSub}>Total visits</Text>
                 </View>
                 <View style={[styles.statBox, styles.statDivider]}>
                     <Text style={styles.statLabel}>Fire Streak</Text>
@@ -291,62 +449,67 @@ const UserDashboard = () => {
                 </View>
             )}
 
-            {/* Standalone Today's Metrics Card (No dropdown, no profile details) */}
-            <View style={styles.todayMetricsCard}>
-                <View style={styles.todayMetricsHeader}>
+            {/* Attendance Calendar in place of old Today's Metrics Card */}
+            <View style={styles.calendarCard}>
+                <View style={styles.calendarHeader}>
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                        <Ionicons name="analytics" size={20} color={colors.primary} />
-                        <Text style={styles.todayMetricsTitle}>TODAY'S METRICS</Text>
+                        <Ionicons name="calendar" size={20} color={colors.primary} />
+                        <Text style={styles.calendarTitle}>ATTENDANCE CALENDAR</Text>
                     </View>
-                    <Text style={styles.todayDateText}>{today}</Text>
-                </View>
-
-                <View style={styles.metricsRow}>
-                    <View style={styles.metricChip}>
-                        <Ionicons name="scale-outline" size={18} color={colors.primary} />
-                        <Text style={styles.metricChipVal}>{todayMetrics.weight ? `${todayMetrics.weight} kg` : '--'}</Text>
-                        <Text style={styles.metricChipLabel}>Weight</Text>
-                    </View>
-                    <View style={styles.metricChip}>
-                        <Ionicons name="water-outline" size={18} color="#2196F3" />
-                        <Text style={styles.metricChipVal}>{todayMetrics.waterIntake ? `${todayMetrics.waterIntake} L` : '--'}</Text>
-                        <Text style={styles.metricChipLabel}>Water</Text>
-                    </View>
-                    <View style={styles.metricChip}>
-                        <MaterialCommunityIcons name="shoe-print" size={18} color="#4CAF50" />
-                        <Text style={styles.metricChipVal}>{todayMetrics.steps || '--'}</Text>
-                        <Text style={styles.metricChipLabel}>Steps</Text>
-                    </View>
-                    <View style={styles.metricChip}>
-                        <Text style={{ fontSize: 18 }}>{moodEmoji[todayMetrics.mood] || '😊'}</Text>
-                        <Text style={styles.metricChipVal}>{todayMetrics.mood}</Text>
-                        <Text style={styles.metricChipLabel}>Mood</Text>
+                    <View style={styles.calendarLegend}>
+                        <View style={styles.legendDot} />
+                        <Text style={styles.legendText}>Present ({attendanceStats.present})</Text>
                     </View>
                 </View>
-
-                <Pressable style={styles.logMetricsBtn} onPress={handleOpenMetrics}>
-                    <Ionicons name="add-circle-outline" size={18} color={colors.buttonPrimaryText} />
-                    <Text style={styles.logMetricsBtnText}>LOG TODAY'S METRICS</Text>
-                </Pressable>
+                <Calendar
+                    theme={{
+                        backgroundColor: colors.surface,
+                        calendarBackground: colors.surface,
+                        textSectionTitleColor: colors.secondary,
+                        selectedDayBackgroundColor: colors.primary,
+                        selectedDayTextColor: colors.buttonPrimaryText,
+                        todayTextColor: colors.primary,
+                        dayTextColor: colors.text,
+                        textDisabledColor: colors.border,
+                        monthTextColor: colors.text,
+                        indicatorColor: colors.primary,
+                        arrowColor: colors.primary,
+                    }}
+                    markedDates={attendanceMarkedDates}
+                    enableSwipeMonths={true}
+                />
             </View>
 
-            {/* Quick Actions — 2 cards only */}
+            {/* Quick Actions: Check-In QR & Today's Metrics Option */}
             <View style={styles.quickActions}>
                 <Pressable
-                    style={[styles.quickBtn, { backgroundColor: colors.primary }]}
+                    style={[
+                        styles.quickBtn,
+                        { backgroundColor: isTodayMarked ? colors.surface : colors.primary },
+                        isTodayMarked && { borderWidth: 1.5, borderColor: colors.primary }
+                    ]}
                     onPress={handleCheckIn}
                 >
-                    <Ionicons name="qr-code-outline" size={28} color="#FFF" />
-                    <Text style={styles.quickBtnTitle}>Check-In</Text>
-                    <Text style={styles.quickBtnSub}>Scan to mark attendance</Text>
+                    <Ionicons
+                        name={isTodayMarked ? "checkmark-done-circle" : "qr-code-outline"}
+                        size={28}
+                        color={isTodayMarked ? colors.primary : colors.buttonPrimaryText}
+                    />
+                    <Text style={[styles.quickBtnTitle, { color: isTodayMarked ? colors.primary : colors.buttonPrimaryText }]}>
+                        {isTodayMarked ? 'Checked In' : 'Check-In'}
+                    </Text>
+                    <Text style={[styles.quickBtnSub, { color: isTodayMarked ? colors.secondary : 'rgba(0,0,0,0.7)' }]}>
+                        {isTodayMarked ? 'Attendance marked for today' : 'Scan gym QR code'}
+                    </Text>
                 </Pressable>
+
                 <Pressable
                     style={[styles.quickBtn, { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.primary }]}
                     onPress={handleOpenMetrics}
                 >
                     <Ionicons name="analytics-outline" size={28} color={colors.primary} />
-                    <Text style={[styles.quickBtnTitle, { color: colors.primary }]}>Metrics</Text>
-                    <Text style={[styles.quickBtnSub, { color: colors.secondary }]}>Log daily stats</Text>
+                    <Text style={[styles.quickBtnTitle, { color: colors.primary }]}>Today's Metrics</Text>
+                    <Text style={[styles.quickBtnSub, { color: colors.secondary }]}>Log weight, water & steps</Text>
                 </Pressable>
             </View>
 
@@ -457,19 +620,163 @@ const UserDashboard = () => {
 
             <View style={{ height: 40 }} />
 
-            {/* Metrics Logger Modal */}
+            {/* =========================================================================
+                GPAY-STYLE FULLSCREEN AUTOMATIC INTERACTIVE QR SCANNER MODAL
+               ========================================================================= */}
+            <Modal
+                visible={scanning}
+                animationType="slide"
+                statusBarTranslucent
+                onRequestClose={() => setScanning(false)}
+            >
+                <View style={styles.scannerFullscreen}>
+                    {/* Live Camera Feed */}
+                    <CameraView
+                        style={StyleSheet.absoluteFillObject}
+                        facing="back"
+                        enableTorch={torchOn}
+                        barcodeScannerSettings={{
+                            barcodeTypes: ['qr'],
+                        }}
+                        onBarcodeScanned={scannedRef.current ? undefined : handleBarCodeScanned}
+                    />
+
+                    {/* Dark translucent overlay mask */}
+                    <View style={styles.scannerOverlay}>
+                        {/* Top Header Bar */}
+                        <View style={styles.scannerHeader}>
+                            <Pressable style={styles.scannerIconButton} onPress={() => setScanning(false)}>
+                                <Ionicons name="close" size={26} color="#FFFFFF" />
+                            </Pressable>
+                            <Text style={styles.scannerHeaderTitle}>Scan to Check-In</Text>
+                            <Pressable style={styles.scannerIconButton} onPress={() => setTorchOn(prev => !prev)}>
+                                <Ionicons name={torchOn ? "flash" : "flash-off"} size={22} color={torchOn ? colors.primary : "#FFFFFF"} />
+                            </Pressable>
+                        </View>
+
+                        {/* Interactive Reticle Viewfinder (GPay / Paytm style) */}
+                        <View style={styles.viewfinderContainer}>
+                            <View style={styles.viewfinder}>
+                                {/* Corner Accents */}
+                                <View style={[styles.corner, styles.cornerTL]} />
+                                <View style={[styles.corner, styles.cornerTR]} />
+                                <View style={[styles.corner, styles.cornerBL]} />
+                                <View style={[styles.corner, styles.cornerBR]} />
+
+                                {/* Moving Laser Scan Line */}
+                                <Animated.View
+                                    style={[
+                                        styles.laserLine,
+                                        {
+                                            transform: [{ translateY: scanLineAnim }]
+                                        }
+                                    ]}
+                                />
+                            </View>
+                            <Text style={styles.scannerInstruction}>
+                                Align gym QR code within the frame
+                            </Text>
+                        </View>
+
+                        {/* Bottom Actions Overlay */}
+                        <View style={styles.scannerBottom}>
+                            <Pressable
+                                style={styles.manualCodeBtn}
+                                onPress={() => {
+                                    setScanning(false);
+                                    setTimeout(() => setShowCodeModal(true), 300);
+                                }}
+                            >
+                                <Ionicons name="keypad-outline" size={20} color="#000000" />
+                                <Text style={styles.manualCodeBtnText}>Enter Access Code Manually</Text>
+                            </Pressable>
+                        </View>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* =========================================================================
+                ACCESS CODE MODAL (POPUP ON DASHBOARD)
+               ========================================================================= */}
+            <Modal
+                transparent
+                visible={showCodeModal}
+                animationType="fade"
+                onRequestClose={() => setShowCodeModal(false)}
+            >
+                <View style={styles.modalOverlay}>
+                    <View style={styles.accessCodeCard}>
+                        <View style={styles.accessCodeHeader}>
+                            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+                                <View style={styles.accessIconWrap}>
+                                    <Ionicons name="keypad" size={22} color={colors.primary} />
+                                </View>
+                                <View>
+                                    <Text style={styles.accessCodeTitle}>Enter Access Code</Text>
+                                    <Text style={styles.accessCodeSub}>Daily Gym Verification</Text>
+                                </View>
+                            </View>
+                            <Pressable
+                                onPress={() => {
+                                    setShowCodeModal(false);
+                                    setAccessCode('');
+                                }}
+                                style={{ padding: 4 }}
+                            >
+                                <Ionicons name="close" size={24} color={colors.text} />
+                            </Pressable>
+                        </View>
+
+                        <Text style={styles.accessInstructions}>
+                            Enter the 4-digit daily access code displayed on the gym reception board.
+                        </Text>
+
+                        <TextInput
+                            style={styles.accessCodeInput}
+                            value={accessCode}
+                            onChangeText={setAccessCode}
+                            placeholder="• • • •"
+                            placeholderTextColor={colors.secondary}
+                            keyboardType="number-pad"
+                            maxLength={6}
+                            autoFocus
+                            textAlign="center"
+                        />
+
+                        <Pressable
+                            style={[styles.verifyButton, marking && { opacity: 0.7 }]}
+                            onPress={handleVerifyAndMark}
+                            disabled={marking}
+                        >
+                            {marking ? (
+                                <ActivityIndicator color={colors.buttonPrimaryText} />
+                            ) : (
+                                <>
+                                    <Ionicons name="checkmark-circle" size={20} color={colors.buttonPrimaryText} />
+                                    <Text style={styles.verifyButtonText}>VERIFY & CHECK-IN</Text>
+                                </>
+                            )}
+                        </Pressable>
+                    </View>
+                </View>
+            </Modal>
+
+            {/* =========================================================================
+                TODAY'S METRICS LOGGER MODAL
+               ========================================================================= */}
             <Modal visible={metricsModalVisible} transparent animationType="slide" statusBarTranslucent>
                 <View style={styles.modalOverlay}>
                     <View style={styles.modalContent}>
                         <View style={styles.modalTop}>
-                            <Text style={styles.modalTitle}>Log Today's Metrics</Text>
-                            <Pressable onPress={() => setMetricsModalVisible(false)}>
+                            <View>
+                                <Text style={styles.modalTitle}>Today's Metrics</Text>
+                                <Text style={styles.metricsDate}>{today}</Text>
+                            </View>
+                            <Pressable onPress={() => setMetricsModalVisible(false)} style={{ padding: 4 }}>
                                 <Ionicons name="close" size={26} color={colors.text} />
                             </Pressable>
                         </View>
                         <ScrollView showsVerticalScrollIndicator={false}>
-                            <Text style={styles.metricsDate}>{today}</Text>
-
                             <View style={styles.inputRow}>
                                 <View style={styles.inputGroup}>
                                     <Text style={styles.metLabel}>Weight (kg)</Text>
@@ -524,13 +831,14 @@ const UserDashboard = () => {
                                 onPress={handleSaveMetrics}
                                 disabled={savingMetrics}
                             >
-                                {savingMetrics
-                                    ? <ActivityIndicator color={colors.buttonPrimaryText} />
-                                    : <>
+                                {savingMetrics ? (
+                                    <ActivityIndicator color={colors.buttonPrimaryText} />
+                                ) : (
+                                    <>
                                         <Ionicons name="checkmark-circle" size={20} color={colors.buttonPrimaryText} />
                                         <Text style={styles.saveMetricsBtnText}>SAVE METRICS</Text>
                                     </>
-                                }
+                                )}
                             </Pressable>
                         </ScrollView>
                     </View>
@@ -554,7 +862,6 @@ const getStyles = (colors) => StyleSheet.create({
     statDivider: { borderLeftWidth: 1, borderLeftColor: colors.border },
     statLabel: { color: colors.secondary, fontSize: 10, fontWeight: 'bold', textTransform: 'uppercase', textAlign: 'center', marginBottom: 4 },
     statValue: { color: colors.primary, fontSize: 22, fontWeight: 'bold' },
-    statDen: { fontSize: 14, color: colors.secondary },
     statSub: { color: colors.secondary, fontSize: 10, marginTop: 2 },
 
     // Restriction Banner
@@ -600,49 +907,54 @@ const getStyles = (colors) => StyleSheet.create({
         fontWeight: 'bold',
     },
 
-    // Today's Metrics Standalone Card
-    todayMetricsCard: {
+    // Attendance Calendar Card (replacing today's metrics card)
+    calendarCard: {
         backgroundColor: colors.surface,
         borderRadius: 18,
-        padding: 18,
+        padding: 16,
         marginBottom: 20,
         borderWidth: 1,
         borderColor: colors.border,
     },
-    todayMetricsHeader: {
+    calendarHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 14,
+        marginBottom: 12,
     },
-    todayMetricsTitle: {
+    calendarTitle: {
         fontSize: 13,
         fontWeight: 'bold',
         color: colors.primary,
         letterSpacing: 0.5,
     },
-    todayDateText: {
+    calendarLegend: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 6,
+    },
+    legendDot: {
+        width: 8,
+        height: 8,
+        borderRadius: 4,
+        backgroundColor: colors.primary,
+    },
+    legendText: {
         fontSize: 12,
         color: colors.secondary,
-        fontWeight: '500',
+        fontWeight: '600',
     },
-    metricsRow: { flexDirection: 'row', gap: 10 },
-    metricChip: { flex: 1, backgroundColor: colors.background, borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border, gap: 4 },
-    metricChipVal: { fontSize: 13, fontWeight: 'bold', color: colors.text },
-    metricChipLabel: { fontSize: 9, color: colors.secondary, textTransform: 'uppercase' },
-    logMetricsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, borderRadius: 10, padding: 12, marginTop: 14, gap: 8 },
-    logMetricsBtnText: { color: colors.buttonPrimaryText, fontWeight: 'bold', fontSize: 13 },
 
     // 2 Quick Action Cards
     quickActions: { flexDirection: 'row', gap: 14, marginBottom: 20 },
     quickBtn: {
         flex: 1, alignItems: 'center', justifyContent: 'center',
-        padding: 20, borderRadius: 18, gap: 6,
+        padding: 18, borderRadius: 18, gap: 6,
         elevation: 3, shadowColor: '#000',
         shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4,
     },
-    quickBtnTitle: { color: '#FFF', fontSize: 15, fontWeight: 'bold' },
-    quickBtnSub: { color: 'rgba(255,255,255,0.75)', fontSize: 11, textAlign: 'center' },
+    quickBtnTitle: { fontSize: 15, fontWeight: 'bold' },
+    quickBtnSub: { fontSize: 11, textAlign: 'center' },
 
     // Subscription Card
     subscriptionCard: {
@@ -667,22 +979,219 @@ const getStyles = (colors) => StyleSheet.create({
     chartTitle: { color: colors.secondary, fontSize: 12, fontWeight: 'bold', marginBottom: 12 },
     chart: { borderRadius: 12, marginLeft: -10 },
 
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
-    modalContent: { backgroundColor: colors.background, borderTopLeftRadius: 25, borderTopRightRadius: 25, padding: 25, maxHeight: '85%' },
+    // Modal Overlays
+    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.85)', justifyContent: 'center', alignItems: 'center', padding: 20 },
+
+    // Access Code Modal
+    accessCodeCard: {
+        backgroundColor: colors.surface,
+        borderRadius: 24,
+        padding: 24,
+        width: '100%',
+        maxWidth: 380,
+        borderWidth: 1,
+        borderColor: colors.border,
+        alignItems: 'center',
+    },
+    accessCodeHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        width: '100%',
+        marginBottom: 14,
+    },
+    accessIconWrap: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: colors.primary + '20',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    accessCodeTitle: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: colors.text,
+    },
+    accessCodeSub: {
+        fontSize: 12,
+        color: colors.secondary,
+    },
+    accessInstructions: {
+        fontSize: 13,
+        color: colors.secondary,
+        textAlign: 'center',
+        lineHeight: 18,
+        marginBottom: 20,
+    },
+    accessCodeInput: {
+        backgroundColor: colors.background,
+        borderWidth: 2,
+        borderColor: colors.primary,
+        borderRadius: 16,
+        paddingVertical: 14,
+        paddingHorizontal: 20,
+        width: '100%',
+        fontSize: 32,
+        fontWeight: 'bold',
+        color: colors.primary,
+        letterSpacing: 10,
+        marginBottom: 24,
+    },
+    verifyButton: {
+        backgroundColor: colors.primary,
+        width: '100%',
+        paddingVertical: 15,
+        borderRadius: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+    },
+    verifyButtonText: {
+        color: colors.buttonPrimaryText,
+        fontWeight: 'bold',
+        fontSize: 14,
+        letterSpacing: 0.5,
+    },
+
+    // Metrics Modal
+    modalContent: { backgroundColor: colors.surface, borderRadius: 25, padding: 25, width: '100%', maxHeight: '85%', borderWidth: 1, borderColor: colors.border },
     modalTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 15 },
     modalTitle: { fontSize: 20, fontWeight: 'bold', color: colors.primary },
-    metricsDate: { color: colors.secondary, fontSize: 13, marginBottom: 20 },
+    metricsDate: { color: colors.secondary, fontSize: 13, marginTop: 2 },
     inputRow: { flexDirection: 'row', gap: 12 },
     inputGroup: { flex: 1 },
     metLabel: { color: colors.secondary, fontSize: 12, fontWeight: 'bold', marginBottom: 6, marginTop: 12 },
-    metInput: { backgroundColor: colors.surface, borderRadius: 12, padding: 13, color: colors.text, borderWidth: 1, borderColor: colors.border, fontSize: 15 },
+    metInput: { backgroundColor: colors.background, borderRadius: 12, padding: 13, color: colors.text, borderWidth: 1, borderColor: colors.border, fontSize: 15 },
     moodRow: { flexDirection: 'row', gap: 8, flexWrap: 'wrap', marginTop: 8 },
-    moodBtn: { flex: 1, minWidth: 60, alignItems: 'center', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.surface },
+    moodBtn: { flex: 1, minWidth: 60, alignItems: 'center', padding: 10, borderRadius: 12, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.background },
     moodBtnActive: { borderColor: colors.primary, backgroundColor: colors.primary + '15' },
     moodEmoji: { fontSize: 22 },
     moodLabel: { fontSize: 10, color: colors.secondary, marginTop: 4 },
-    saveMetricsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, padding: 17, borderRadius: 14, marginTop: 25, gap: 10, marginBottom: 10 },
+    saveMetricsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, padding: 16, borderRadius: 14, marginTop: 25, gap: 10, marginBottom: 10 },
     saveMetricsBtnText: { color: colors.buttonPrimaryText, fontWeight: 'bold', fontSize: 15 },
+
+    // Fullscreen GPay-like Interactive QR Scanner
+    scannerFullscreen: {
+        flex: 1,
+        backgroundColor: '#000000',
+    },
+    scannerOverlay: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'space-between',
+        paddingHorizontal: 20,
+        paddingTop: Platform.OS === 'android' ? 50 : 60,
+        paddingBottom: 40,
+    },
+    scannerHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        paddingHorizontal: 8,
+    },
+    scannerIconButton: {
+        width: 44,
+        height: 44,
+        borderRadius: 22,
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    scannerHeaderTitle: {
+        color: '#FFFFFF',
+        fontSize: 18,
+        fontWeight: 'bold',
+        letterSpacing: 0.5,
+    },
+    viewfinderContainer: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    viewfinder: {
+        width: 250,
+        height: 250,
+        position: 'relative',
+        borderRadius: 20,
+        overflow: 'hidden',
+        backgroundColor: 'rgba(255,255,255,0.03)',
+    },
+    corner: {
+        position: 'absolute',
+        width: 32,
+        height: 32,
+        borderColor: colors.primary,
+    },
+    cornerTL: {
+        top: 0,
+        left: 0,
+        borderTopWidth: 4,
+        borderLeftWidth: 4,
+        borderTopLeftRadius: 16,
+    },
+    cornerTR: {
+        top: 0,
+        right: 0,
+        borderTopWidth: 4,
+        borderRightWidth: 4,
+        borderTopRightRadius: 16,
+    },
+    cornerBL: {
+        bottom: 0,
+        left: 0,
+        borderBottomWidth: 4,
+        borderLeftWidth: 4,
+        borderBottomLeftRadius: 16,
+    },
+    cornerBR: {
+        bottom: 0,
+        right: 0,
+        borderBottomWidth: 4,
+        borderRightWidth: 4,
+        borderBottomRightRadius: 16,
+    },
+    laserLine: {
+        height: 3,
+        width: '100%',
+        backgroundColor: colors.primary,
+        shadowColor: colors.primary,
+        shadowOffset: { width: 0, height: 0 },
+        shadowOpacity: 0.9,
+        shadowRadius: 10,
+        elevation: 6,
+    },
+    scannerInstruction: {
+        color: '#FFFFFF',
+        fontSize: 14,
+        fontWeight: '600',
+        marginTop: 24,
+        textAlign: 'center',
+        backgroundColor: 'rgba(0,0,0,0.6)',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        overflow: 'hidden',
+    },
+    scannerBottom: {
+        alignItems: 'center',
+        paddingBottom: 10,
+    },
+    manualCodeBtn: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        backgroundColor: colors.primary,
+        paddingHorizontal: 22,
+        paddingVertical: 14,
+        borderRadius: 24,
+        elevation: 4,
+    },
+    manualCodeBtnText: {
+        color: colors.buttonPrimaryText,
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
 });
 
 export default UserDashboard;

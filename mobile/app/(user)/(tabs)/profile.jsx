@@ -18,14 +18,14 @@ import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
-import { useTheme } from '../../../constants/ThemeContext';
+import { darkTheme } from '../../../constants/ThemeContext';
 import { API_URL } from '../../../constants/Config';
 
 const BLOOD_GROUPS = ['A+', 'B+', 'O+', 'AB+', 'A-', 'B-', 'O-', 'AB-'];
 const GENDERS = ['Male', 'Female', 'Other'];
 
 export default function UserProfile() {
-    const { colors } = useTheme();
+    const colors = darkTheme;
     const styles = getStyles(colors);
 
     const [loading, setLoading] = useState(true);

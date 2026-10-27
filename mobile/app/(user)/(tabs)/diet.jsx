@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, Modal, Dimensions, RefreshControl } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
-import { useTheme } from '../../../constants/ThemeContext';
+import { darkTheme } from '../../../constants/ThemeContext';
 import axios from 'axios';
 import { API_URL } from '../../../constants/Config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -44,7 +44,7 @@ const getMealListFromPlan = (p) => {
 };
 
 const UserDiet = () => {
-    const { colors } = useTheme();
+    const colors = darkTheme;
     const [loading, setLoading] = useState(true);
     const [plan, setPlan] = useState(null);
     const [memberData, setMemberData] = useState(null);

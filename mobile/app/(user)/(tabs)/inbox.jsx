@@ -4,7 +4,7 @@ import {
     ActivityIndicator, RefreshControl, Alert
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme } from '../../../constants/ThemeContext';
+import { darkTheme } from '../../../constants/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_URL } from '../../../constants/Config';
@@ -35,7 +35,7 @@ const TYPE_ICONS = {
 };
 
 export default function UserInbox() {
-    const { colors } = useTheme();
+    const colors = darkTheme;
     const [messages, setMessages] = useState([]);
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);

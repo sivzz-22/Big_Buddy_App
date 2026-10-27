@@ -1,25 +1,20 @@
-import { Tabs, useNavigation, useRouter } from 'expo-router';
+import { Tabs, useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, View, Text, AppState } from 'react-native';
-import { DrawerActions } from '@react-navigation/native';
-import { useTheme } from '../../../constants/ThemeContext';
+import { darkTheme } from '../../../constants/ThemeContext';
 import { useState, useEffect, useRef, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_URL } from '../../../constants/Config';
 
 export default function UserTabLayout() {
-    const navigation = useNavigation();
     const router = useRouter();
-    const { colors } = useTheme();
+    // User side is strictly Dark Mode only
+    const colors = darkTheme;
     const [unreadCount, setUnreadCount] = useState(0);
-    const memberIdRef = useRef(null); // cache memberId so we don't re-fetch member on every refresh
+    const memberIdRef = useRef(null);
     const intervalRef = useRef(null);
     const appState = useRef(AppState.currentState);
-
-    const toggleDrawer = () => {
-        navigation.dispatch(DrawerActions.openDrawer());
-    };
 
     // Get memberId once and cache it
     const getMemberId = async () => {
@@ -28,7 +23,8 @@ export default function UserTabLayout() {
             const userJson = await AsyncStorage.getItem('userData');
             const user = JSON.parse(userJson);
             if (!user) return null;
-            const memberRes = await axios.get(`${API_URL}/members/${user.email || user._id}`);
+            const identifier = user.memberId || user.email || user._id;
+            const memberRes = await axios.get(`${API_URL}/members/${identifier}`);
             memberIdRef.current = memberRes.data._id;
             return memberIdRef.current;
         } catch (e) {
@@ -36,7 +32,7 @@ export default function UserTabLayout() {
         }
     };
 
-    // Fast unread count fetch — uses cached memberId
+    // Fast unread count fetch
     const fetchUnread = useCallback(async () => {
         try {
             const memberId = await getMemberId();
@@ -44,18 +40,14 @@ export default function UserTabLayout() {
             const res = await axios.get(`${API_URL}/messages/unread-count/${memberId}`);
             setUnreadCount(res.data.count || 0);
         } catch (e) {
-            // silently fail — don't crash if backend is down
+            // silently fail
         }
     }, []);
 
     useEffect(() => {
-        // Initial fetch
         fetchUnread();
-
-        // Poll every 15 seconds (faster than 60s)
         intervalRef.current = setInterval(fetchUnread, 15000);
 
-        // Also re-fetch when app comes back to foreground
         const appStateSubscription = AppState.addEventListener('change', (nextState) => {
             if (appState.current.match(/inactive|background/) && nextState === 'active') {
                 fetchUnread();
@@ -69,13 +61,12 @@ export default function UserTabLayout() {
         };
     }, [fetchUnread]);
 
-    // Expose fetchUnread so tab screens can trigger it (via navigation event)
     const InboxButton = () => (
         <Pressable
             onPress={() => {
                 router.push('/(user)/(tabs)/inbox');
             }}
-            style={{ marginRight: 15, position: 'relative' }}
+            style={{ marginRight: 16, position: 'relative' }}
         >
             <Ionicons name="mail-outline" size={26} color={colors.primary} />
             {unreadCount > 0 && (
@@ -95,7 +86,6 @@ export default function UserTabLayout() {
 
     return (
         <Tabs
-            // Re-fetch unread count every time ANY tab is focused
             screenListeners={{
                 focus: () => {
                     fetchUnread();
@@ -112,20 +102,17 @@ export default function UserTabLayout() {
                     color: colors.primary,
                     fontWeight: 'bold',
                     fontSize: 20,
+                    letterSpacing: 0.5,
                 },
                 tabBarStyle: {
                     backgroundColor: colors.background,
                     borderTopColor: colors.border,
                     height: 60,
-                    paddingBottom: 5,
+                    paddingBottom: 6,
+                    paddingTop: 4,
                 },
                 tabBarActiveTintColor: colors.primary,
                 tabBarInactiveTintColor: colors.secondary,
-                headerLeft: () => (
-                    <Pressable onPress={toggleDrawer} style={{ marginLeft: 15 }}>
-                        <Ionicons name="menu" size={28} color={colors.primary} />
-                    </Pressable>
-                ),
                 headerRight: () => <InboxButton />,
             }}
         >
@@ -139,13 +126,14 @@ export default function UserTabLayout() {
                     ),
                 }}
             />
+            {/* Profile replaces Attendance in the second tab slot */}
             <Tabs.Screen
-                name="attendance"
+                name="profile"
                 options={{
-                    title: 'Attendance',
-                    headerTitle: 'BIGBUDDY ATTENDANCE',
+                    title: 'Profile',
+                    headerTitle: 'MY PROFILE',
                     tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="calendar" size={size} color={color} />
+                        <Ionicons name="person" size={size} color={color} />
                     ),
                 }}
             />
@@ -169,7 +157,7 @@ export default function UserTabLayout() {
                     ),
                 }}
             />
-            {/* inbox screen registered but hidden from tab bar */}
+            {/* Inbox screen registered for navigation, hidden from tab bar */}
             <Tabs.Screen
                 name="inbox"
                 options={{
@@ -179,22 +167,9 @@ export default function UserTabLayout() {
                     tabBarItemStyle: { display: 'none' },
                 }}
                 listeners={{
-                    // When inbox screen comes into focus, re-fetch unread after a short delay
-                    // (so it picks up changes made while browsing inbox)
                     blur: () => {
-                        // User left inbox — refresh badge as they may have read messages
                         setTimeout(fetchUnread, 500);
                     },
-                }}
-            />
-            {/* profile screen registered but hidden from tab bar */}
-            <Tabs.Screen
-                name="profile"
-                options={{
-                    title: 'Profile',
-                    headerTitle: 'MY PROFILE',
-                    tabBarButton: () => null,
-                    tabBarItemStyle: { display: 'none' },
                 }}
             />
         </Tabs>

@@ -1,8 +1,9 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useLocalSearchParams, useNavigation, router, useFocusEffect } from 'expo-router';
-import { View, Text, StyleSheet, FlatList, Dimensions, ScrollView, Pressable, ActivityIndicator, Alert, Modal, TextInput, RefreshControl } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Dimensions, ScrollView, Pressable, ActivityIndicator, Alert, Modal, TextInput, RefreshControl, Platform } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+
+import DateTimePicker from '../../../components/DateTimePickerWrapper';
 import { useTheme } from '../../../constants/ThemeContext';
 import { BarChart } from 'react-native-chart-kit';
 import axios from 'axios';
@@ -245,7 +246,7 @@ const AttendancePage = () => {
                         </Pressable>
                     </View>
 
-                    {showPicker && (
+                    {showPicker && DateTimePicker && (
                         <DateTimePicker
                             value={date}
                             mode="date"
