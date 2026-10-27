@@ -12,7 +12,8 @@ import {
     Alert,
     ActivityIndicator,
     Animated,
-    Platform
+    Platform,
+    BackHandler
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { darkTheme } from '../../../constants/ThemeContext';
@@ -105,6 +106,16 @@ const UserDashboard = () => {
         return () => {
             if (anim) anim.stop();
         };
+    }, [scanning]);
+
+    // Hardware back press listener for Android scanner
+    useEffect(() => {
+        if (!scanning) return;
+        const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+            setScanning(false);
+            return true;
+        });
+        return () => sub.remove();
     }, [scanning]);
 
     const fetchData = async () => {
@@ -388,11 +399,12 @@ const UserDashboard = () => {
     }
 
     return (
-        <ScrollView
-            style={styles.container}
-            showsVerticalScrollIndicator={false}
-            refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
-        >
+        <View style={{ flex: 1, backgroundColor: colors.background }}>
+            <ScrollView
+                style={styles.container}
+                showsVerticalScrollIndicator={false}
+                refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />}
+            >
             {/* Header */}
             <View style={styles.header}>
                 <View>
@@ -619,81 +631,78 @@ const UserDashboard = () => {
             </View>
 
             <View style={{ height: 40 }} />
+        </ScrollView>
 
-            {/* =========================================================================
-                GPAY-STYLE FULLSCREEN AUTOMATIC INTERACTIVE QR SCANNER MODAL
-               ========================================================================= */}
-            <Modal
-                visible={scanning}
-                animationType="slide"
-                statusBarTranslucent
-                onRequestClose={() => setScanning(false)}
-            >
-                <View style={styles.scannerFullscreen}>
-                    {/* Live Camera Feed */}
-                    <CameraView
-                        style={StyleSheet.absoluteFillObject}
-                        facing="back"
-                        enableTorch={torchOn}
-                        barcodeScannerSettings={{
-                            barcodeTypes: ['qr'],
-                        }}
-                        onBarcodeScanned={scannedRef.current ? undefined : handleBarCodeScanned}
-                    />
+        {/* =========================================================================
+            GPAY-STYLE FULLSCREEN AUTOMATIC INTERACTIVE QR SCANNER OVERLAY
+            (Rendered in main window outside Modal so camera preview is 100% visible)
+           ========================================================================= */}
+        {scanning && (
+            <View style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999, backgroundColor: '#000000' }]}>
+                {/* Live Camera Feed */}
+                <CameraView
+                    style={StyleSheet.absoluteFill}
+                    facing="back"
+                    enableTorch={torchOn}
+                    barcodeScannerSettings={{
+                        barcodeTypes: ['qr'],
+                    }}
+                    onBarcodeScanned={scannedRef.current ? undefined : handleBarCodeScanned}
+                />
 
-                    {/* Dark translucent overlay mask */}
-                    <View style={styles.scannerOverlay}>
-                        {/* Top Header Bar */}
-                        <View style={styles.scannerHeader}>
-                            <Pressable style={styles.scannerIconButton} onPress={() => setScanning(false)}>
-                                <Ionicons name="close" size={26} color="#FFFFFF" />
-                            </Pressable>
-                            <Text style={styles.scannerHeaderTitle}>Scan to Check-In</Text>
-                            <Pressable style={styles.scannerIconButton} onPress={() => setTorchOn(prev => !prev)}>
-                                <Ionicons name={torchOn ? "flash" : "flash-off"} size={22} color={torchOn ? colors.primary : "#FFFFFF"} />
-                            </Pressable>
+                {/* Translucent overlay with centered viewfinder reticle */}
+                <View style={styles.scannerOverlay}>
+                    {/* Top Header Bar */}
+                    <View style={styles.scannerHeader}>
+                        <Pressable style={styles.scannerIconButton} onPress={() => setScanning(false)}>
+                            <Ionicons name="close" size={26} color="#FFFFFF" />
+                        </Pressable>
+                        <Text style={styles.scannerHeaderTitle}>Scan to Check-In</Text>
+                        <Pressable style={styles.scannerIconButton} onPress={() => setTorchOn(prev => !prev)}>
+                            <Ionicons name={torchOn ? "flash" : "flash-off"} size={22} color={torchOn ? colors.primary : "#FFFFFF"} />
+                        </Pressable>
+                    </View>
+
+                    {/* Interactive Reticle Viewfinder (Centered!) */}
+                    <View style={styles.scannerCenter}>
+                        <View style={styles.viewfinder}>
+                            {/* Corner Accents */}
+                            <View style={[styles.corner, styles.cornerTL]} />
+                            <View style={[styles.corner, styles.cornerTR]} />
+                            <View style={[styles.corner, styles.cornerBL]} />
+                            <View style={[styles.corner, styles.cornerBR]} />
+
+                            {/* Moving Laser Scan Line */}
+                            <Animated.View
+                                style={[
+                                    styles.laserLine,
+                                    {
+                                        transform: [{ translateY: scanLineAnim }]
+                                    }
+                                ]}
+                            />
                         </View>
+                        <Text style={styles.scannerInstruction}>
+                            Align gym QR code within the frame
+                        </Text>
+                    </View>
 
-                        {/* Interactive Reticle Viewfinder (GPay / Paytm style) */}
-                        <View style={styles.viewfinderContainer}>
-                            <View style={styles.viewfinder}>
-                                {/* Corner Accents */}
-                                <View style={[styles.corner, styles.cornerTL]} />
-                                <View style={[styles.corner, styles.cornerTR]} />
-                                <View style={[styles.corner, styles.cornerBL]} />
-                                <View style={[styles.corner, styles.cornerBR]} />
-
-                                {/* Moving Laser Scan Line */}
-                                <Animated.View
-                                    style={[
-                                        styles.laserLine,
-                                        {
-                                            transform: [{ translateY: scanLineAnim }]
-                                        }
-                                    ]}
-                                />
-                            </View>
-                            <Text style={styles.scannerInstruction}>
-                                Align gym QR code within the frame
-                            </Text>
-                        </View>
-
-                        {/* Bottom Actions Overlay */}
-                        <View style={styles.scannerBottom}>
-                            <Pressable
-                                style={styles.manualCodeBtn}
-                                onPress={() => {
-                                    setScanning(false);
-                                    setTimeout(() => setShowCodeModal(true), 300);
-                                }}
-                            >
-                                <Ionicons name="keypad-outline" size={20} color="#000000" />
-                                <Text style={styles.manualCodeBtnText}>Enter Access Code Manually</Text>
-                            </Pressable>
-                        </View>
+                    {/* Bottom Actions Overlay */}
+                    <View style={styles.scannerBottom}>
+                        <Pressable
+                            style={styles.manualCodeBtn}
+                            onPress={() => {
+                                setScanning(false);
+                                setTimeout(() => setShowCodeModal(true), 300);
+                            }}
+                        >
+                            <Ionicons name="keypad-outline" size={20} color="#000000" />
+                            <Text style={styles.manualCodeBtnText}>Enter Access Code Manually</Text>
+                        </Pressable>
                     </View>
                 </View>
-            </Modal>
+            </View>
+        )}
 
             {/* =========================================================================
                 ACCESS CODE MODAL (POPUP ON DASHBOARD)
@@ -844,7 +853,7 @@ const UserDashboard = () => {
                     </View>
                 </View>
             </Modal>
-        </ScrollView>
+        </View>
     );
 };
 
@@ -1079,23 +1088,25 @@ const getStyles = (colors) => StyleSheet.create({
     },
     scannerOverlay: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(0,0,0,0.5)',
         justifyContent: 'space-between',
+        alignItems: 'center',
         paddingHorizontal: 20,
         paddingTop: Platform.OS === 'android' ? 50 : 60,
         paddingBottom: 40,
+        backgroundColor: 'transparent',
     },
     scannerHeader: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
-        paddingHorizontal: 8,
+        width: '100%',
+        paddingHorizontal: 4,
     },
     scannerIconButton: {
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: 'rgba(0,0,0,0.6)',
+        backgroundColor: 'rgba(0,0,0,0.65)',
         justifyContent: 'center',
         alignItems: 'center',
     },
@@ -1105,17 +1116,19 @@ const getStyles = (colors) => StyleSheet.create({
         fontWeight: 'bold',
         letterSpacing: 0.5,
     },
-    viewfinderContainer: {
-        alignItems: 'center',
+    scannerCenter: {
+        flex: 1,
         justifyContent: 'center',
+        alignItems: 'center',
+        width: '100%',
     },
     viewfinder: {
-        width: 250,
-        height: 250,
+        width: 260,
+        height: 260,
         position: 'relative',
         borderRadius: 20,
         overflow: 'hidden',
-        backgroundColor: 'rgba(255,255,255,0.03)',
+        backgroundColor: 'transparent',
     },
     corner: {
         position: 'absolute',
@@ -1167,22 +1180,23 @@ const getStyles = (colors) => StyleSheet.create({
         fontWeight: '600',
         marginTop: 24,
         textAlign: 'center',
-        backgroundColor: 'rgba(0,0,0,0.6)',
-        paddingHorizontal: 16,
-        paddingVertical: 8,
+        backgroundColor: 'rgba(0,0,0,0.65)',
+        paddingHorizontal: 18,
+        paddingVertical: 9,
         borderRadius: 20,
         overflow: 'hidden',
     },
     scannerBottom: {
+        width: '100%',
         alignItems: 'center',
-        paddingBottom: 10,
+        paddingBottom: 20,
     },
     manualCodeBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 8,
         backgroundColor: colors.primary,
-        paddingHorizontal: 22,
+        paddingHorizontal: 24,
         paddingVertical: 14,
         borderRadius: 24,
         elevation: 4,

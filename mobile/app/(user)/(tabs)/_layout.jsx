@@ -126,17 +126,6 @@ export default function UserTabLayout() {
                     ),
                 }}
             />
-            {/* Profile replaces Attendance in the second tab slot */}
-            <Tabs.Screen
-                name="profile"
-                options={{
-                    title: 'Profile',
-                    headerTitle: 'MY PROFILE',
-                    tabBarIcon: ({ color, size }) => (
-                        <Ionicons name="person" size={size} color={color} />
-                    ),
-                }}
-            />
             <Tabs.Screen
                 name="workout"
                 options={{
@@ -154,6 +143,16 @@ export default function UserTabLayout() {
                     headerTitle: 'BIGBUDDY DIET',
                     tabBarIcon: ({ color, size }) => (
                         <Ionicons name="restaurant" size={size} color={color} />
+                    ),
+                }}
+            />
+            <Tabs.Screen
+                name="profile"
+                options={{
+                    title: 'Profile',
+                    headerTitle: 'MY PROFILE',
+                    tabBarIcon: ({ color, size }) => (
+                        <Ionicons name="person" size={size} color={color} />
                     ),
                 }}
             />

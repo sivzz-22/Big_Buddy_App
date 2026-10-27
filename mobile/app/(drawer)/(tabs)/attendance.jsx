@@ -8,7 +8,7 @@ import { useTheme } from '../../../constants/ThemeContext';
 import { BarChart } from 'react-native-chart-kit';
 import axios from 'axios';
 import { API_URL } from '../../../constants/Config';
-import QRCode from 'react-native-qrcode-svg';
+import QRCode from '../../../components/QRCodeWrapper';
 
 const { width } = Dimensions.get('window');
 
