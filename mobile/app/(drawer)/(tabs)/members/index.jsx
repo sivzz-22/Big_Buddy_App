@@ -268,35 +268,47 @@ export default function MembersList() {
 
             <FAB onPress={openSheet} styles={styles} colors={colors} />
 
-            {isSheetVisible && (
-                <View style={styles.overlay}>
-                    <Pressable style={styles.overlayPressable} onPress={closeSheet} />
-                    <Animated.View style={[styles.bottomSheet, { transform: [{ translateY: slideAnim }] }]}>
+            <Modal
+                transparent
+                visible={isSheetVisible}
+                animationType="fade"
+                onRequestClose={closeSheet}
+            >
+                <Pressable style={styles.modalBackdrop} onPress={closeSheet}>
+                    <Pressable style={styles.bottomSheet} onPress={(e) => e.stopPropagation()}>
                         <View style={styles.sheetHandle} />
                         <Text style={styles.sheetTitle}>Add New</Text>
 
                         <View style={styles.sheetGrid}>
-                            <Link href={{ pathname: "/members/add", params: { type: 'member' } }} asChild>
-                                <Pressable style={styles.sheetItem}>
-                                    <View style={[styles.sheetIconBox, { backgroundColor: colors.isDark ? '#1E88E520' : '#E3F2FD' }]}>
-                                        <Ionicons name="person-add" size={24} color="#1E88E5" />
-                                    </View>
-                                    <Text style={styles.sheetItemText}>New Member</Text>
-                                </Pressable>
-                            </Link>
+                            <Pressable
+                                style={styles.sheetItem}
+                                onPress={() => {
+                                    closeSheet();
+                                    router.push({ pathname: "/members/add", params: { type: 'member' } });
+                                }}
+                            >
+                                <View style={[styles.sheetIconBox, { backgroundColor: colors.isDark ? '#1E88E520' : '#E3F2FD' }]}>
+                                    <Ionicons name="person-add" size={24} color="#1E88E5" />
+                                </View>
+                                <Text style={styles.sheetItemText}>New Member</Text>
+                            </Pressable>
 
-                            <Link href={{ pathname: "/members/add", params: { type: 'trainer' } }} asChild>
-                                <Pressable style={styles.sheetItem}>
-                                    <View style={[styles.sheetIconBox, { backgroundColor: colors.isDark ? '#43A04720' : '#E8F5E9' }]}>
-                                        <MaterialIcons name="fitness-center" size={24} color="#43A047" />
-                                    </View>
-                                    <Text style={styles.sheetItemText}>New Trainer</Text>
-                                </Pressable>
-                            </Link>
+                            <Pressable
+                                style={styles.sheetItem}
+                                onPress={() => {
+                                    closeSheet();
+                                    router.push({ pathname: "/members/add", params: { type: 'trainer' } });
+                                }}
+                            >
+                                <View style={[styles.sheetIconBox, { backgroundColor: colors.isDark ? '#43A04720' : '#E8F5E9' }]}>
+                                    <MaterialIcons name="fitness-center" size={24} color="#43A047" />
+                                </View>
+                                <Text style={styles.sheetItemText}>New Trainer</Text>
+                            </Pressable>
                         </View>
-                    </Animated.View>
-                </View>
-            )}
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </View>
     );
 }
@@ -504,13 +516,10 @@ const getStyles = (colors) => StyleSheet.create({
     },
 
     // Bottom Sheet
-    overlay: {
-        ...StyleSheet.absoluteFillObject,
-        justifyContent: 'flex-end',
-        backgroundColor: 'rgba(0,0,0,0.5)',
-    },
-    overlayPressable: {
+    modalBackdrop: {
         flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.5)',
+        justifyContent: 'flex-end',
     },
     bottomSheet: {
         backgroundColor: colors.surface,

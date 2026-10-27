@@ -6,20 +6,22 @@ import {
     ScrollView,
     TextInput,
     Pressable,
+    Image,
     Alert,
     ActivityIndicator,
     KeyboardAvoidingView,
     Platform,
     RefreshControl
 } from 'react-native';
-import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { router, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { useTheme } from '../../../constants/ThemeContext';
 import { API_URL } from '../../../constants/Config';
 
-const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'O+', 'O-', 'AB+', 'AB-'];
+const BLOOD_GROUPS = ['A+', 'B+', 'O+', 'AB+', 'A-', 'B-', 'O-', 'AB-'];
 const GENDERS = ['Male', 'Female', 'Other'];
 
 export default function UserProfile() {
@@ -31,8 +33,12 @@ export default function UserProfile() {
     const [refreshing, setRefreshing] = useState(false);
     const [member, setMember] = useState(null);
 
-    // Form fields
+    // Form fields — matches admin add member fields
     const [formData, setFormData] = useState({
+        photo: null,
+        name: '',
+        memberID: '',
+        phone: '',
         email: '',
         dob: '',
         gender: '',
@@ -44,7 +50,6 @@ export default function UserProfile() {
         description: '',
     });
 
-    // Check if mandatory fields are complete
     const isComplete = Boolean(
         formData.email?.trim() &&
         formData.dob?.trim() &&
@@ -59,13 +64,16 @@ export default function UserProfile() {
             if (!userJson) return;
             const user = JSON.parse(userJson);
 
-            // Fetch latest member record by memberId, email, or _id
             const identifier = user.memberId || user.email || user._id;
             const res = await axios.get(`${API_URL}/members/${identifier}`);
             const m = res.data;
             setMember(m);
 
             setFormData({
+                photo: m.photo || null,
+                name: m.name || '',
+                memberID: m.memberID || '',
+                phone: m.phone || '',
                 email: m.email || '',
                 dob: m.dob || '',
                 gender: m.gender || '',
@@ -96,8 +104,58 @@ export default function UserProfile() {
         loadProfile();
     };
 
+    const handlePickImage = () => {
+        Alert.alert(
+            "Profile Photo",
+            "Choose a method to update your profile photo",
+            [
+                {
+                    text: "Take Photo",
+                    onPress: async () => {
+                        const { status } = await ImagePicker.requestCameraPermissionsAsync();
+                        if (status !== 'granted') {
+                            Alert.alert("Permission needed", "Camera permission is required to take photos.");
+                            return;
+                        }
+                        const result = await ImagePicker.launchCameraAsync({
+                            allowsEditing: true,
+                            aspect: [1, 1],
+                            quality: 0.5,
+                            base64: true,
+                        });
+                        if (!result.canceled) {
+                            const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+                            setFormData(prev => ({ ...prev, photo: base64 }));
+                        }
+                    }
+                },
+                {
+                    text: "Choose from Library",
+                    onPress: async () => {
+                        const result = await ImagePicker.launchImageLibraryAsync({
+                            mediaTypes: ['images'],
+                            allowsEditing: true,
+                            aspect: [1, 1],
+                            quality: 0.5,
+                            base64: true,
+                        });
+                        if (!result.canceled) {
+                            const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
+                            setFormData(prev => ({ ...prev, photo: base64 }));
+                        }
+                    }
+                },
+                ...(formData.photo ? [{
+                    text: "Remove Photo",
+                    style: "destructive",
+                    onPress: () => setFormData(prev => ({ ...prev, photo: null }))
+                }] : []),
+                { text: "Cancel", style: "cancel" }
+            ]
+        );
+    };
+
     const handleSave = async () => {
-        // Validate mandatory fields
         const missing = [];
         if (!formData.email?.trim()) missing.push('Email Address');
         if (!formData.dob?.trim()) missing.push('Date of Birth (DOB)');
@@ -107,13 +165,12 @@ export default function UserProfile() {
 
         if (missing.length > 0) {
             Alert.alert(
-                'Mandatory Fields Required',
-                `Please fill in the following required profile details to continue:\n\n• ${missing.join('\n• ')}`
+                'Required Fields (*)',
+                `Please complete the following required profile details:\n\n• ${missing.join('\n• ')}`
             );
             return;
         }
 
-        // Email basic format check
         if (!formData.email.includes('@') || !formData.email.includes('.')) {
             Alert.alert('Invalid Email', 'Please enter a valid email address.');
             return;
@@ -123,6 +180,7 @@ export default function UserProfile() {
         try {
             const memberIdentifier = member?._id || member?.memberID;
             const res = await axios.put(`${API_URL}/members/${memberIdentifier}`, {
+                photo: formData.photo,
                 email: formData.email.trim(),
                 dob: formData.dob.trim(),
                 gender: formData.gender.trim(),
@@ -134,7 +192,7 @@ export default function UserProfile() {
                 description: formData.description.trim(),
             });
 
-            // Update local storage so rest of app knows profile is complete
+            // Refresh AsyncStorage userData
             const userJson = await AsyncStorage.getItem('userData');
             if (userJson) {
                 const user = JSON.parse(userJson);
@@ -145,19 +203,16 @@ export default function UserProfile() {
 
             setMember(res.data);
             Alert.alert(
-                'Profile Completed! 🎉',
-                'Your profile details have been saved successfully. You now have full access to all features in Big Buddy!',
+                'Profile Saved! 🎉',
+                'Your profile has been updated successfully. Full app access is unlocked!',
                 [
-                    {
-                        text: 'Go to Dashboard',
-                        onPress: () => router.replace('/(user)/(tabs)'),
-                    },
-                    { text: 'Stay Here', style: 'cancel' }
+                    { text: 'Go to Dashboard', onPress: () => router.replace('/(user)/(tabs)') },
+                    { text: 'OK', style: 'cancel' }
                 ]
             );
         } catch (error) {
             console.error('Error saving profile:', error);
-            Alert.alert('Error', error.response?.data?.message || 'Failed to update profile. Please try again.');
+            Alert.alert('Error', error.response?.data?.message || 'Failed to update profile.');
         } finally {
             setSaving(false);
         }
@@ -165,13 +220,13 @@ export default function UserProfile() {
 
     const handleLogout = () => {
         Alert.alert(
-            'Logout',
-            'Are you sure you want to log out of Big Buddy?',
+            "Logout",
+            "Are you sure you want to log out?",
             [
-                { text: 'Cancel', style: 'cancel' },
+                { text: "Cancel", style: "cancel" },
                 {
-                    text: 'Logout',
-                    style: 'destructive',
+                    text: "Log Out",
+                    style: "destructive",
                     onPress: async () => {
                         await AsyncStorage.removeItem('userToken');
                         await AsyncStorage.removeItem('userData');
@@ -181,6 +236,51 @@ export default function UserProfile() {
             ]
         );
     };
+
+    const renderInput = (label, field, placeholder, keyboardType = 'default', multiline = false, numberOfLines = 1) => (
+        <View style={styles.inputGroup}>
+            <Text style={styles.label}>{label}</Text>
+            <TextInput
+                style={[
+                    styles.input,
+                    multiline && {
+                        height: numberOfLines > 1 ? 80 : 50,
+                        textAlignVertical: 'top',
+                        paddingTop: 12
+                    }
+                ]}
+                value={formData[field]}
+                onChangeText={(t) => setFormData(prev => ({ ...prev, [field]: t }))}
+                placeholder={placeholder}
+                placeholderTextColor={colors.secondary}
+                keyboardType={keyboardType}
+                multiline={multiline}
+                numberOfLines={numberOfLines}
+            />
+        </View>
+    );
+
+    const renderSelect = (label, field, options) => (
+        <View style={styles.inputGroup}>
+            <Text style={styles.label}>{label}</Text>
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipScroll}>
+                {options.map((opt, index) => {
+                    const active = formData[field] === opt;
+                    return (
+                        <Pressable
+                            key={`${opt}-${index}`}
+                            style={[styles.chip, active && styles.activeChip]}
+                            onPress={() => setFormData(prev => ({ ...prev, [field]: opt }))}
+                        >
+                            <Text style={[styles.chipText, active && styles.activeChipText]}>
+                                {opt}
+                            </Text>
+                        </Pressable>
+                    );
+                })}
+            </ScrollView>
+        </View>
+    );
 
     if (loading) {
         return (
@@ -200,256 +300,198 @@ export default function UserProfile() {
                 style={styles.container}
                 contentContainerStyle={styles.content}
                 showsVerticalScrollIndicator={false}
+                keyboardShouldPersistTaps="handled"
                 refreshControl={
                     <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.primary} />
                 }
             >
-                {/* Header Card */}
-                <View style={styles.headerCard}>
-                    <View style={styles.avatarWrap}>
-                        <Text style={styles.avatarText}>
-                            {member?.name ? member.name.charAt(0).toUpperCase() : 'U'}
-                        </Text>
+                {/* Header / Member Info Card — matches admin profile styling */}
+                <View style={styles.header}>
+                    <View style={styles.avatarContainer}>
+                        <Pressable style={styles.avatar} onPress={handlePickImage}>
+                            {formData.photo ? (
+                                <Image source={{ uri: formData.photo }} style={styles.avatarImage} />
+                            ) : (
+                                <Text style={styles.avatarText}>
+                                    {member?.name ? member.name.charAt(0).toUpperCase() : 'U'}
+                                </Text>
+                            )}
+                        </Pressable>
+                        <Pressable style={styles.editBadge} onPress={handlePickImage}>
+                            <Ionicons name="camera" size={15} color="#FFF" />
+                        </Pressable>
                     </View>
-                    <View style={styles.headerInfo}>
-                        <Text style={styles.memberName}>{member?.name || 'Member'}</Text>
-                        <Text style={styles.memberIdText}>ID: {member?.memberID}</Text>
-                        <View style={styles.planBadge}>
-                            <Ionicons name="shield-checkmark" size={14} color={colors.primary} />
-                            <Text style={styles.planBadgeText}>
+
+                    <Text style={styles.name}>{member?.name || 'Member'}</Text>
+                    <Text style={styles.role}>
+                        Member • {member?.status || 'Active'}
+                    </Text>
+
+                    <View style={styles.infoChips}>
+                        <View style={styles.infoChip}>
+                            <Ionicons name="card-outline" size={14} color={colors.secondary} />
+                            <Text style={styles.infoChipText}>ID: {member?.memberID}</Text>
+                        </View>
+                        <View style={styles.infoChip}>
+                            <Ionicons name="call-outline" size={14} color={colors.secondary} />
+                            <Text style={styles.infoChipText}>{member?.phone || '--'}</Text>
+                        </View>
+                        <View style={styles.infoChip}>
+                            <Ionicons name="shield-checkmark-outline" size={14} color={colors.primary} />
+                            <Text style={[styles.infoChipText, { color: colors.primary, fontWeight: 'bold' }]}>
                                 {member?.subscriptionType || 'General Member'}
                             </Text>
                         </View>
+                    </View>
+
+                    {formData.address ? (
+                        <View style={styles.addressBox}>
+                            <Ionicons name="location-outline" size={16} color={colors.primary} />
+                            <Text style={styles.addressText} numberOfLines={2}>
+                                {formData.address}
+                            </Text>
+                        </View>
+                    ) : null}
+                </View>
+
+                {/* Quick Stats Grid — matches admin profile statsGrid */}
+                <View style={styles.statsGrid}>
+                    <View style={styles.statItem}>
+                        <Text style={styles.statValue}>
+                            {formData.height ? `${formData.height} cm` : '--'}
+                        </Text>
+                        <Text style={styles.statLabel}>Height</Text>
+                    </View>
+                    <View style={styles.verticalLine} />
+                    <View style={styles.statItem}>
+                        <Text style={styles.statValue}>
+                            {formData.weight ? `${formData.weight} kg` : '--'}
+                        </Text>
+                        <Text style={styles.statLabel}>Weight</Text>
+                    </View>
+                    <View style={styles.verticalLine} />
+                    <View style={styles.statItem}>
+                        <Text style={styles.statValue}>
+                            {formData.bloodGroup || '--'}
+                        </Text>
+                        <Text style={styles.statLabel}>Blood</Text>
+                    </View>
+                    <View style={styles.verticalLine} />
+                    <View style={styles.statItem}>
+                        <Text style={styles.statValue}>
+                            {formData.waistSize ? `${formData.waistSize} in` : '--'}
+                        </Text>
+                        <Text style={styles.statLabel}>Waist</Text>
                     </View>
                 </View>
 
                 {/* Profile Status Banner */}
                 {isComplete ? (
-                    <View style={[styles.statusBanner, { backgroundColor: '#4CAF5018', borderColor: '#4CAF5050' }]}>
+                    <View style={[styles.statusBanner, { backgroundColor: '#4CAF5015', borderColor: '#4CAF5040' }]}>
                         <Ionicons name="checkmark-circle" size={24} color="#4CAF50" />
                         <View style={{ flex: 1 }}>
                             <Text style={[styles.statusBannerTitle, { color: '#4CAF50' }]}>Profile Complete</Text>
-                            <Text style={styles.statusBannerSub}>All mandatory details are up to date. Full app access unlocked.</Text>
+                            <Text style={styles.statusBannerSub}>All required details are filled. Full app access unlocked.</Text>
                         </View>
                     </View>
                 ) : (
                     <View style={[styles.statusBanner, { backgroundColor: '#FF980018', borderColor: '#FF980060' }]}>
                         <Ionicons name="alert-circle" size={26} color="#FF9800" />
                         <View style={{ flex: 1 }}>
-                            <Text style={[styles.statusBannerTitle, { color: '#FF9800' }]}>Profile Incomplete (Required)</Text>
+                            <Text style={[styles.statusBannerTitle, { color: '#FF9800' }]}>Profile Incomplete (*)</Text>
                             <Text style={styles.statusBannerSub}>
-                                Please complete the mandatory details marked with (*) below to continue using all features of Big Buddy.
+                                Please complete all fields marked with (*) below to continue using all features of Big Buddy.
                             </Text>
                         </View>
                     </View>
                 )}
 
-                {/* Section 1: Gym Account Info (Admin Managed) */}
-                <Text style={styles.sectionTitle}>ACCOUNT DETAILS</Text>
-                <View style={styles.card}>
-                    <View style={styles.readOnlyRow}>
-                        <View style={styles.readOnlyCol}>
-                            <Text style={styles.readOnlyLabel}>FULL NAME</Text>
-                            <Text style={styles.readOnlyValue}>{member?.name || '--'}</Text>
-                        </View>
-                        <View style={styles.readOnlyCol}>
-                            <Text style={styles.readOnlyLabel}>MEMBER ID</Text>
-                            <Text style={styles.readOnlyValue}>{member?.memberID || '--'}</Text>
-                        </View>
-                    </View>
-                    <View style={[styles.readOnlyRow, { marginTop: 12 }]}>
-                        <View style={styles.readOnlyCol}>
-                            <Text style={styles.readOnlyLabel}>PHONE NUMBER</Text>
-                            <Text style={styles.readOnlyValue}>{member?.phone || '--'}</Text>
-                        </View>
-                        <View style={styles.readOnlyCol}>
-                            <Text style={styles.readOnlyLabel}>MEMBERSHIP STATUS</Text>
-                            <Text style={[styles.readOnlyValue, { color: member?.status === 'Active' ? '#4CAF50' : colors.error }]}>
-                                {member?.status || 'Active'}
-                            </Text>
-                        </View>
-                    </View>
-                    <Text style={styles.readOnlyNote}>
-                        * Contact gym administration if you need to update name, phone, or membership plan.
-                    </Text>
+                {/* Form Section 1: Personal Details (same as admin add member page) */}
+                <Text style={styles.sectionHeader}>Personal Details</Text>
+
+                <View style={styles.inputGroup}>
+                    <Text style={styles.label}>FULL NAME</Text>
+                    <TextInput
+                        style={[styles.input, styles.readOnlyInput]}
+                        value={formData.name}
+                        editable={false}
+                    />
                 </View>
 
-                {/* Section 2: Mandatory Details to Fill */}
-                <Text style={styles.sectionTitle}>ESSENTIAL DETAILS (*)</Text>
-                <View style={styles.card}>
-                    {/* Email */}
-                    <View style={styles.inputGroup}>
-                        <View style={styles.labelRow}>
-                            <Text style={styles.label}>EMAIL ADDRESS *</Text>
-                            {!formData.email?.trim() && <Text style={styles.missingBadge}>Required</Text>}
-                        </View>
-                        <TextInput
-                            style={[styles.input, !formData.email?.trim() && styles.inputWarning]}
-                            value={formData.email}
-                            onChangeText={(t) => setFormData(prev => ({ ...prev, email: t }))}
-                            placeholder="e.g. john@example.com"
-                            placeholderTextColor={colors.secondary}
-                            keyboardType="email-address"
-                            autoCapitalize="none"
-                        />
-                    </View>
-
-                    {/* DOB & Gender */}
-                    <View style={styles.inputGroup}>
-                        <View style={styles.labelRow}>
-                            <Text style={styles.label}>DATE OF BIRTH (DD/MM/YYYY) *</Text>
-                            {!formData.dob?.trim() && <Text style={styles.missingBadge}>Required</Text>}
-                        </View>
-                        <TextInput
-                            style={[styles.input, !formData.dob?.trim() && styles.inputWarning]}
-                            value={formData.dob}
-                            onChangeText={(t) => setFormData(prev => ({ ...prev, dob: t }))}
-                            placeholder="DD/MM/YYYY (e.g. 15/08/1998)"
-                            placeholderTextColor={colors.secondary}
-                        />
-                    </View>
-
-                    {/* Gender Chips */}
-                    <View style={styles.inputGroup}>
-                        <View style={styles.labelRow}>
-                            <Text style={styles.label}>GENDER *</Text>
-                            {!formData.gender?.trim() && <Text style={styles.missingBadge}>Required</Text>}
-                        </View>
-                        <View style={styles.chipRow}>
-                            {GENDERS.map(g => {
-                                const selected = formData.gender === g;
-                                return (
-                                    <Pressable
-                                        key={g}
-                                        style={[styles.chip, selected && styles.chipSelected]}
-                                        onPress={() => setFormData(prev => ({ ...prev, gender: g }))}
-                                    >
-                                        <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                                            {g}
-                                        </Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
-                    </View>
-
-                    {/* Blood Group Chips */}
-                    <View style={styles.inputGroup}>
-                        <View style={styles.labelRow}>
-                            <Text style={styles.label}>BLOOD GROUP *</Text>
-                            {!formData.bloodGroup?.trim() && <Text style={styles.missingBadge}>Required</Text>}
-                        </View>
-                        <View style={styles.chipRow}>
-                            {BLOOD_GROUPS.map(bg => {
-                                const selected = formData.bloodGroup === bg;
-                                return (
-                                    <Pressable
-                                        key={bg}
-                                        style={[styles.bgChip, selected && styles.chipSelected]}
-                                        onPress={() => setFormData(prev => ({ ...prev, bloodGroup: bg }))}
-                                    >
-                                        <Text style={[styles.chipText, selected && styles.chipTextSelected]}>
-                                            {bg}
-                                        </Text>
-                                    </Pressable>
-                                );
-                            })}
-                        </View>
-                    </View>
-
-                    {/* Residential Address */}
-                    <View style={styles.inputGroup}>
-                        <View style={styles.labelRow}>
-                            <Text style={styles.label}>RESIDENTIAL ADDRESS *</Text>
-                            {!formData.address?.trim() && <Text style={styles.missingBadge}>Required</Text>}
-                        </View>
-                        <TextInput
-                            style={[styles.input, styles.textArea, !formData.address?.trim() && styles.inputWarning]}
-                            value={formData.address}
-                            onChangeText={(t) => setFormData(prev => ({ ...prev, address: t }))}
-                            placeholder="Full residential address..."
-                            placeholderTextColor={colors.secondary}
-                            multiline
-                            numberOfLines={3}
-                        />
-                    </View>
-                </View>
-
-                {/* Section 3: Physical Stats (Optional) */}
-                <Text style={styles.sectionTitle}>PHYSICAL STATS & HEALTH NOTES</Text>
-                <View style={styles.card}>
-                    <View style={styles.row}>
-                        <View style={styles.oneThird}>
-                            <Text style={styles.label}>HEIGHT (cm)</Text>
+                <View style={styles.row}>
+                    <View style={styles.halfWidth}>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>MEMBER ID</Text>
                             <TextInput
-                                style={styles.input}
-                                value={formData.height}
-                                onChangeText={(t) => setFormData(prev => ({ ...prev, height: t }))}
-                                placeholder="175"
-                                placeholderTextColor={colors.secondary}
-                                keyboardType="numeric"
-                            />
-                        </View>
-                        <View style={styles.oneThird}>
-                            <Text style={styles.label}>WEIGHT (kg)</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={formData.weight}
-                                onChangeText={(t) => setFormData(prev => ({ ...prev, weight: t }))}
-                                placeholder="70"
-                                placeholderTextColor={colors.secondary}
-                                keyboardType="numeric"
-                            />
-                        </View>
-                        <View style={styles.oneThird}>
-                            <Text style={styles.label}>WAIST (in)</Text>
-                            <TextInput
-                                style={styles.input}
-                                value={formData.waistSize}
-                                onChangeText={(t) => setFormData(prev => ({ ...prev, waistSize: t }))}
-                                placeholder="32"
-                                placeholderTextColor={colors.secondary}
-                                keyboardType="numeric"
+                                style={[styles.input, styles.readOnlyInput]}
+                                value={formData.memberID}
+                                editable={false}
                             />
                         </View>
                     </View>
-
-                    <View style={[styles.inputGroup, { marginTop: 12 }]}>
-                        <Text style={styles.label}>MEDICAL HISTORY / FITNESS GOALS</Text>
-                        <TextInput
-                            style={[styles.input, styles.textArea]}
-                            value={formData.description}
-                            onChangeText={(t) => setFormData(prev => ({ ...prev, description: t }))}
-                            placeholder="Any injuries, allergies, medications, or fitness targets..."
-                            placeholderTextColor={colors.secondary}
-                            multiline
-                            numberOfLines={3}
-                        />
+                    <View style={styles.halfWidth}>
+                        <View style={styles.inputGroup}>
+                            <Text style={styles.label}>PHONE NUMBER</Text>
+                            <TextInput
+                                style={[styles.input, styles.readOnlyInput]}
+                                value={formData.phone}
+                                editable={false}
+                            />
+                        </View>
                     </View>
                 </View>
 
-                {/* Save Button */}
+                {renderInput('EMAIL ADDRESS *', 'email', 'e.g. john@example.com', 'email-address')}
+
+                <View style={styles.row}>
+                    <View style={[styles.oneThirdWidth, { flex: 2 }]}>
+                        {renderInput('DOB *', 'dob', 'DD/MM/YYYY')}
+                    </View>
+                    <View style={styles.oneThirdWidth}>
+                        {renderInput('BLOOD GROUP *', 'bloodGroup', 'e.g. O+')}
+                    </View>
+                </View>
+
+                {renderSelect('GENDER *', 'gender', GENDERS)}
+
+                {renderInput('ADDRESS *', 'address', 'Full Residential Address', 'default', true, 3)}
+
+                {/* Form Section 2: Physical Details (same as admin add member page) */}
+                <Text style={styles.sectionHeader}>Physical Details & Notes</Text>
+
+                <View style={styles.row}>
+                    <View style={styles.oneThirdWidth}>
+                        {renderInput('HEIGHT (cm)', 'height', '175', 'numeric')}
+                    </View>
+                    <View style={styles.oneThirdWidth}>
+                        {renderInput('WEIGHT (kg)', 'weight', '70', 'numeric')}
+                    </View>
+                    <View style={styles.oneThirdWidth}>
+                        {renderInput('WAIST (in)', 'waistSize', '32', 'numeric')}
+                    </View>
+                </View>
+
+                {renderInput('DESCRIPTION / MEDICAL NOTES', 'description', 'Any injuries, medications, fitness goals...', 'default', true, 3)}
+
+                {/* Save Button — matches admin add.jsx */}
                 <Pressable
                     style={[styles.saveButton, saving && { opacity: 0.7 }]}
                     onPress={handleSave}
                     disabled={saving}
                 >
                     {saving ? (
-                        <ActivityIndicator size="small" color="#FFF" />
+                        <ActivityIndicator color={colors.buttonPrimaryText} />
                     ) : (
-                        <>
-                            <Ionicons name="save-outline" size={20} color="#FFF" />
-                            <Text style={styles.saveButtonText}>
-                                {isComplete ? 'UPDATE PROFILE' : 'SAVE & COMPLETE PROFILE'}
-                            </Text>
-                        </>
+                        <Text style={styles.saveButtonText}>
+                            {isComplete ? 'UPDATE PROFILE' : 'SAVE & COMPLETE PROFILE'}
+                        </Text>
                     )}
                 </Pressable>
 
                 {/* Logout Button */}
                 <Pressable style={styles.logoutBtn} onPress={handleLogout}>
                     <Ionicons name="log-out-outline" size={20} color={colors.error} />
-                    <Text style={styles.logoutBtnText}>Log Out of Big Buddy</Text>
+                    <Text style={styles.logoutText}>Log Out</Text>
                 </Pressable>
             </ScrollView>
         </KeyboardAvoidingView>
@@ -462,69 +504,146 @@ const getStyles = (colors) => StyleSheet.create({
         backgroundColor: colors.background,
     },
     content: {
-        padding: 16,
-        paddingBottom: 40,
+        padding: 20,
+        paddingBottom: 50,
     },
-    headerCard: {
+
+    // Header Card — matching admin profile
+    header: {
+        alignItems: 'center',
+        paddingVertical: 24,
+        paddingHorizontal: 16,
         backgroundColor: colors.surface,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 18,
+        marginBottom: 16,
+    },
+    avatarContainer: {
+        position: 'relative',
+        marginBottom: 12,
+    },
+    avatar: {
+        width: 100,
+        height: 100,
+        borderRadius: 50,
+        backgroundColor: colors.background,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: colors.primary,
+        overflow: 'hidden',
+    },
+    avatarImage: {
+        width: '100%',
+        height: '100%',
+    },
+    avatarText: {
+        fontSize: 38,
+        fontWeight: 'bold',
+        color: colors.primary,
+    },
+    editBadge: {
+        position: 'absolute',
+        bottom: 0,
+        right: 0,
+        backgroundColor: colors.primary,
+        width: 32,
+        height: 32,
         borderRadius: 16,
-        padding: 18,
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 2,
+        borderColor: colors.surface,
+    },
+    name: {
+        fontSize: 22,
+        fontWeight: 'bold',
+        color: colors.text,
+        marginBottom: 4,
+    },
+    role: {
+        fontSize: 14,
+        color: colors.primary,
+        fontWeight: '600',
+        marginBottom: 10,
+    },
+    infoChips: {
+        flexDirection: 'row',
+        gap: 8,
+        marginBottom: 10,
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+    },
+    infoChip: {
         flexDirection: 'row',
         alignItems: 'center',
-        marginBottom: 16,
+        backgroundColor: colors.background,
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 12,
+        gap: 5,
         borderWidth: 1,
         borderColor: colors.border,
     },
-    avatarWrap: {
-        width: 60,
-        height: 60,
-        borderRadius: 30,
-        backgroundColor: colors.primary,
-        justifyContent: 'center',
+    infoChipText: {
+        color: colors.secondary,
+        fontSize: 12,
+    },
+    addressBox: {
+        flexDirection: 'row',
         alignItems: 'center',
-        marginRight: 16,
+        gap: 6,
+        paddingHorizontal: 15,
+        marginTop: 4,
     },
-    avatarText: {
-        fontSize: 26,
-        fontWeight: 'bold',
-        color: '#FFFFFF',
+    addressText: {
+        color: colors.secondary,
+        fontSize: 13,
+        textAlign: 'center',
     },
-    headerInfo: {
+
+    // Stats Grid — matching admin profile
+    statsGrid: {
+        flexDirection: 'row',
+        justifyContent: 'space-around',
+        alignItems: 'center',
+        backgroundColor: colors.surface,
+        paddingVertical: 16,
+        borderWidth: 1,
+        borderColor: colors.border,
+        borderRadius: 16,
+        marginBottom: 16,
+    },
+    statItem: {
+        alignItems: 'center',
         flex: 1,
     },
-    memberName: {
-        fontSize: 18,
+    statValue: {
+        fontSize: 16,
         fontWeight: 'bold',
         color: colors.text,
     },
-    memberIdText: {
-        fontSize: 13,
+    statLabel: {
+        fontSize: 11,
         color: colors.secondary,
         marginTop: 2,
+        textTransform: 'uppercase',
     },
-    planBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        gap: 5,
-        backgroundColor: colors.primary + '18',
-        paddingHorizontal: 8,
-        paddingVertical: 3,
-        borderRadius: 6,
-        alignSelf: 'flex-start',
-        marginTop: 6,
+    verticalLine: {
+        width: 1,
+        height: '60%',
+        backgroundColor: colors.border,
     },
-    planBadgeText: {
-        fontSize: 12,
-        color: colors.primary,
-        fontWeight: '600',
-    },
+
+    // Status Banner
     statusBanner: {
-        borderRadius: 12,
+        borderRadius: 14,
         padding: 14,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
-        marginBottom: 16,
+        marginBottom: 20,
         borderWidth: 1,
     },
     statusBannerTitle: {
@@ -537,167 +656,115 @@ const getStyles = (colors) => StyleSheet.create({
         marginTop: 2,
         lineHeight: 16,
     },
-    sectionTitle: {
-        fontSize: 12,
-        fontWeight: '700',
-        color: colors.secondary,
-        letterSpacing: 1,
-        marginBottom: 8,
-        marginLeft: 4,
-    },
-    card: {
-        backgroundColor: colors.surface,
-        borderRadius: 14,
-        padding: 16,
+
+    // Form Section Headers & Inputs — matching admin add member page
+    sectionHeader: {
+        color: colors.primary,
+        fontSize: 18,
+        fontWeight: '600',
+        marginTop: 10,
         marginBottom: 18,
-        borderWidth: 1,
-        borderColor: colors.border,
-    },
-    readOnlyRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-    },
-    readOnlyCol: {
-        flex: 1,
-    },
-    readOnlyLabel: {
-        fontSize: 11,
-        color: colors.secondary,
-        fontWeight: '600',
-        marginBottom: 3,
-    },
-    readOnlyValue: {
-        fontSize: 14,
-        color: colors.text,
-        fontWeight: '600',
-    },
-    readOnlyNote: {
-        fontSize: 11,
-        color: colors.secondary,
-        fontStyle: 'italic',
-        marginTop: 12,
-        paddingTop: 8,
-        borderTopWidth: 1,
-        borderTopColor: colors.border + '60',
+        borderBottomWidth: 1,
+        borderBottomColor: colors.border,
+        paddingBottom: 8,
     },
     inputGroup: {
-        marginBottom: 14,
-    },
-    labelRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 6,
+        marginBottom: 18,
     },
     label: {
-        fontSize: 11,
-        fontWeight: '700',
         color: colors.secondary,
-        letterSpacing: 0.5,
-    },
-    missingBadge: {
-        fontSize: 11,
-        color: '#FF9800',
-        fontWeight: '600',
+        fontSize: 12,
+        marginBottom: 8,
+        fontWeight: 'bold',
+        textTransform: 'uppercase',
     },
     input: {
-        backgroundColor: colors.background,
+        backgroundColor: colors.surface,
+        color: colors.text,
+        padding: 14,
+        borderRadius: 12,
         borderWidth: 1,
         borderColor: colors.border,
-        borderRadius: 10,
-        paddingHorizontal: 14,
-        paddingVertical: 10,
-        fontSize: 14,
-        color: colors.text,
+        fontSize: 15,
     },
-    inputWarning: {
-        borderColor: '#FF980090',
-        backgroundColor: '#FF980008',
+    readOnlyInput: {
+        opacity: 0.75,
+        backgroundColor: colors.background,
     },
-    textArea: {
-        height: 70,
-        textAlignVertical: 'top',
-        paddingTop: 10,
-    },
-    chipRow: {
+    row: {
         flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 8,
+        gap: 15,
+    },
+    oneThirdWidth: {
+        flex: 1,
+    },
+    halfWidth: {
+        flex: 1,
+    },
+
+    // Chips — matching admin add member page
+    chipScroll: {
+        flexDirection: 'row',
     },
     chip: {
-        paddingHorizontal: 16,
-        paddingVertical: 8,
-        borderRadius: 20,
-        backgroundColor: colors.background,
+        paddingVertical: 10,
+        paddingHorizontal: 20,
+        borderRadius: 25,
+        backgroundColor: colors.surface,
         borderWidth: 1,
         borderColor: colors.border,
+        marginRight: 10,
     },
-    bgChip: {
-        paddingHorizontal: 12,
-        paddingVertical: 7,
-        borderRadius: 18,
-        backgroundColor: colors.background,
-        borderWidth: 1,
-        borderColor: colors.border,
-        minWidth: 46,
-        alignItems: 'center',
-    },
-    chipSelected: {
+    activeChip: {
         backgroundColor: colors.primary,
         borderColor: colors.primary,
     },
     chipText: {
-        fontSize: 13,
-        color: colors.text,
-        fontWeight: '500',
+        color: colors.secondary,
+        fontSize: 14,
     },
-    chipTextSelected: {
-        color: '#FFFFFF',
+    activeChipText: {
+        color: colors.buttonPrimaryText,
         fontWeight: 'bold',
     },
-    row: {
-        flexDirection: 'row',
-        gap: 10,
-    },
-    oneThird: {
-        flex: 1,
-    },
+
+    // Save Button — matching admin add.jsx
     saveButton: {
         backgroundColor: colors.primary,
+        padding: 17,
         borderRadius: 12,
-        paddingVertical: 14,
-        flexDirection: 'row',
         alignItems: 'center',
-        justifyContent: 'center',
-        gap: 8,
-        marginTop: 6,
-        marginBottom: 14,
+        marginTop: 25,
+        marginBottom: 16,
         shadowColor: colors.primary,
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
-        elevation: 4,
+        elevation: 5,
     },
     saveButtonText: {
-        color: '#FFFFFF',
-        fontSize: 15,
+        color: colors.buttonPrimaryText,
+        fontSize: 16,
         fontWeight: 'bold',
-        letterSpacing: 0.5,
+        letterSpacing: 1,
     },
+
+    // Logout Button — matching admin profile logoutBtn
     logoutBtn: {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
         gap: 8,
-        paddingVertical: 12,
-        borderRadius: 10,
+        backgroundColor: colors.surface,
+        paddingVertical: 14,
+        borderRadius: 12,
         borderWidth: 1,
         borderColor: colors.error + '40',
-        backgroundColor: colors.error + '10',
+        marginBottom: 20,
     },
-    logoutBtnText: {
+    logoutText: {
         color: colors.error,
-        fontSize: 14,
-        fontWeight: '600',
+        fontWeight: 'bold',
+        fontSize: 15,
     },
 });

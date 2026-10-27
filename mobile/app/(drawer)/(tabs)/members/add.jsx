@@ -374,25 +374,6 @@ export default function AddMember() {
                 {isRenew ? 'Membership Renewal' : (isUpdate ? 'Update Profile' : `Add New ${type === 'trainer' ? 'Trainer' : 'Member'}`)}
             </Text>
 
-            {!isUpdate && (
-                <View style={{
-                    backgroundColor: colors.primary + '15',
-                    borderColor: colors.primary + '40',
-                    borderWidth: 1,
-                    borderRadius: 10,
-                    padding: 12,
-                    marginBottom: 15,
-                    flexDirection: 'row',
-                    alignItems: 'center',
-                    gap: 10
-                }}>
-                    <Ionicons name="information-circle-outline" size={22} color={colors.primary} />
-                    <Text style={{ color: colors.text, fontSize: 13, flex: 1, lineHeight: 18 }}>
-                        Only <Text style={{ fontWeight: 'bold', color: colors.primary }}>Name, Member ID, Phone & Password (*)</Text> are required. Other details can be completed by the member later in their profile.
-                    </Text>
-                </View>
-            )}
-
             {/* Image Placeholder */}
             <View style={styles.imageSection}>
                 <View style={styles.imagePlaceholder}>
@@ -428,38 +409,38 @@ export default function AddMember() {
                     </View>
                 </View>
                 <View style={styles.halfWidth}>
-                    {renderInput(isUpdate ? 'PASSWORD (Optional)' : 'PASSWORD *', 'password', isUpdate ? 'Leave blank to keep' : 'Set a password', 'default', true)}
+                    {renderInput(isUpdate ? 'PASSWORD' : 'PASSWORD *', 'password', isUpdate ? 'Leave blank to keep' : 'Set a password', 'default', true)}
                 </View>
             </View>
             {renderInput('PHONE NUMBER *', 'phone', 'e.g. 9876543210', 'phone-pad')}
-            {renderInput('EMAIL ADDRESS (Optional)', 'email', 'e.g. john@example.com', 'email-address')}
+            {renderInput('EMAIL ADDRESS', 'email', 'e.g. john@example.com', 'email-address')}
 
             <View style={styles.row}>
                 <View style={[styles.oneThirdWidth, { flex: 2 }]}>
-                    {renderInput('DOB (Optional)', 'dob', 'DD/MM/YYYY')}
+                    {renderInput('DOB', 'dob', 'DD/MM/YYYY')}
                 </View>
                 <View style={styles.oneThirdWidth}>
-                    {renderInput('BLOOD GROUP (Optional)', 'bloodGroup', 'e.g. O+')}
+                    {renderInput('BLOOD GROUP', 'bloodGroup', 'e.g. O+')}
                 </View>
             </View>
 
-            {renderSelect('GENDER (Optional)', 'gender', ['Male', 'Female', 'Other'])}
+            {renderSelect('GENDER', 'gender', ['Male', 'Female', 'Other'])}
 
-            {renderInput('ADDRESS (Optional)', 'address', 'Full Residential Address')}
+            {renderInput('ADDRESS', 'address', 'Full Residential Address')}
 
             <View style={styles.row}>
                 <View style={styles.oneThirdWidth}>
-                    {renderInput('HEIGHT (cm) (Optional)', 'height', '175', 'numeric')}
+                    {renderInput('HEIGHT (cm)', 'height', '175', 'numeric')}
                 </View>
                 <View style={styles.oneThirdWidth}>
-                    {renderInput('WEIGHT (kg) (Optional)', 'weight', '70', 'numeric')}
+                    {renderInput('WEIGHT (kg)', 'weight', '70', 'numeric')}
                 </View>
                 <View style={styles.oneThirdWidth}>
-                    {renderInput('WAIST (in) (Optional)', 'waistSize', '32', 'numeric')}
+                    {renderInput('WAIST (in)', 'waistSize', '32', 'numeric')}
                 </View>
             </View>
 
-            {renderInput('DESCRIPTION / MEDICAL NOTES (Optional)', 'description', 'Any injuries, medications...')}
+            {renderInput('DESCRIPTION / MEDICAL NOTES', 'description', 'Any injuries, medications...')}
 
             {/* Type Specific Fields */}
             {type === 'trainer' ? (
