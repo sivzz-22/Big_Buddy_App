@@ -46,14 +46,11 @@ router.get("/:id", async (req, res) => {
 
         let query;
         if (isEmail) {
-            // Only search by email or memberID — skip _id cast
-            query = { $or: [{ email: identifier }, { memberID: identifier }] };
+            query = { $or: [{ email: identifier.toLowerCase() }, { memberID: identifier }] };
         } else if (isObjectId) {
-            // Valid ObjectId — search all three fields
-            query = { $or: [{ _id: identifier }, { memberID: identifier }, { email: identifier }] };
+            query = { $or: [{ _id: identifier }, { memberID: identifier }, { email: identifier.toLowerCase() }, { phone: identifier }] };
         } else {
-            // Could be a custom memberID string
-            query = { memberID: identifier };
+            query = { $or: [{ memberID: identifier }, { phone: identifier }, { memberID: identifier.toUpperCase() }] };
         }
 
         const member = await Member.findOne(query);
@@ -99,11 +96,20 @@ router.post("/", async (req, res) => {
             expiryDate = calculateExpiry(subscriptionType);
         }
 
+        const isProfileComplete = Boolean(
+            req.body.email && req.body.email.trim() !== '' &&
+            req.body.dob && req.body.dob.trim() !== '' &&
+            req.body.gender && req.body.gender.trim() !== '' &&
+            req.body.bloodGroup && req.body.bloodGroup.trim() !== '' &&
+            req.body.address && req.body.address.trim() !== ''
+        );
+
         const member = new Member({
             ...req.body,
             password: hashedPassword,
             visiblePassword: password, // Store plain text
-            expiryDate: expiryDate || req.body.expiryDate
+            expiryDate: expiryDate || req.body.expiryDate,
+            isProfileComplete
         });
 
         const savedMember = await member.save();
@@ -116,9 +122,19 @@ router.post("/", async (req, res) => {
 // Update a member or trainer
 router.put("/:id", async (req, res) => {
     try {
-        const member = await Member.findOne({
-            $or: [{ _id: req.params.id }, { memberID: req.params.id }]
-        });
+        const identifier = req.params.id;
+        const isObjectId = /^[a-fA-F0-9]{24}$/.test(identifier);
+
+        let queryOr = [
+            { memberID: identifier },
+            { email: identifier.toLowerCase() },
+            { phone: identifier }
+        ];
+        if (isObjectId) {
+            queryOr.unshift({ _id: identifier });
+        }
+
+        const member = await Member.findOne({ $or: queryOr });
 
         if (member) {
             const oldSubscription = member.subscriptionType;
@@ -148,6 +164,15 @@ router.put("/:id", async (req, res) => {
                 member.expiryDate = calculateExpiry(req.body.subscriptionType, startDate);
                 member.status = 'Active';
             }
+
+            // Update isProfileComplete
+            member.isProfileComplete = Boolean(
+                member.email && member.email.trim() !== '' &&
+                member.dob && member.dob.trim() !== '' &&
+                member.gender && member.gender.trim() !== '' &&
+                member.bloodGroup && member.bloodGroup.trim() !== '' &&
+                member.address && member.address.trim() !== ''
+            );
 
             const updatedMember = await member.save();
             res.json(updatedMember);

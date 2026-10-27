@@ -9,6 +9,8 @@ import { Calendar } from 'react-native-calendars';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { TextInput, Modal } from 'react-native';
 
+import { router, useFocusEffect } from 'expo-router';
+
 const { width } = Dimensions.get('window');
 
 const UserAttendance = () => {
@@ -33,6 +35,14 @@ const UserAttendance = () => {
 
     const styles = getStyles(colors);
 
+    const isProfileComplete = Boolean(
+        memberData?.email && memberData.email.trim() !== '' &&
+        memberData?.dob && memberData.dob.trim() !== '' &&
+        memberData?.gender && memberData.gender.trim() !== '' &&
+        memberData?.bloodGroup && memberData.bloodGroup.trim() !== '' &&
+        memberData?.address && memberData.address.trim() !== ''
+    );
+
     const fetchData = async () => {
         setLoading(true);
         try {
@@ -40,14 +50,13 @@ const UserAttendance = () => {
             const user = JSON.parse(userJson);
             setUserData(user);
 
-            // Fetch Member to get _id
-            const memberRes = await axios.get(`${API_URL}/members/${user.email || user._id}`);
+            // Fetch Member by memberId, email, or _id
+            const identifier = user.memberId || user.email || user._id;
+            const memberRes = await axios.get(`${API_URL}/members/${identifier}`);
             const member = memberRes.data;
             setMemberData(member);
 
             // Fetch Presence for this month
-            // We use the existing attendance API which might need an endpoint for user-specific history
-            // For now, let's assume we can filter by memberId
             const res = await axios.get(`${API_URL}/attendance?memberId=${member._id}`);
             
             const markedDates = {};
@@ -70,6 +79,12 @@ const UserAttendance = () => {
             setLoading(false);
         }
     };
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchData();
+        }, [])
+    );
 
     const calculateStreak = (data) => {
         // Simple streak calculation logic could go here
@@ -141,6 +156,42 @@ const UserAttendance = () => {
         return (
             <View style={[styles.container, { justifyContent: 'center' }]}>
                 <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+        );
+    }
+
+    if (!loading && memberData && !isProfileComplete) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 25 }]}>
+                <View style={{
+                    width: 72, height: 72, borderRadius: 36,
+                    backgroundColor: '#FF980020',
+                    justifyContent: 'center', alignItems: 'center',
+                    marginBottom: 16
+                }}>
+                    <Ionicons name="lock-closed" size={36} color="#FF9800" />
+                </View>
+                <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text, textAlign: 'center', marginBottom: 8 }}>
+                    Profile Completion Required
+                </Text>
+                <Text style={{ fontSize: 14, color: colors.secondary, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+                    Your admin created your basic account. Please complete your essential profile details (Email, DOB, Gender, Blood Group, Address) to unlock attendance check-in.
+                </Text>
+                <Pressable
+                    style={{
+                        backgroundColor: colors.primary,
+                        borderRadius: 12,
+                        paddingVertical: 14,
+                        paddingHorizontal: 24,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 8
+                    }}
+                    onPress={() => router.push('/(user)/(tabs)/profile')}
+                >
+                    <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Complete Profile Now</Text>
+                    <Ionicons name="arrow-forward" size={18} color="#FFF" />
+                </Pressable>
             </View>
         );
     }

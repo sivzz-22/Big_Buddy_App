@@ -61,15 +61,24 @@ function CustomUserDrawerContent(props) {
 
     return (
         <DrawerContentScrollView {...props} style={{ backgroundColor: colors.surface }} contentContainerStyle={styles.drawerContent}>
-            <View style={styles.header}>
-                <View style={styles.avatar}>
-                    <Text style={styles.avatarText}>{userData?.name ? userData.name.charAt(0).toUpperCase() : 'U'}</Text>
+            <Pressable onPress={() => router.push('/(user)/(tabs)/profile')}>
+                <View style={styles.header}>
+                    <View style={styles.avatar}>
+                        <Text style={styles.avatarText}>{userData?.name ? userData.name.charAt(0).toUpperCase() : 'U'}</Text>
+                    </View>
+                    <Text style={styles.name}>{userData?.name || 'User'}</Text>
+                    <Text style={styles.role}>Member</Text>
                 </View>
-                <Text style={styles.name}>{userData?.name || 'User'}</Text>
-                <Text style={styles.role}>Member</Text>
-            </View>
+            </Pressable>
 
             <View style={styles.itemsContainer}>
+                <DrawerItemRow
+                    key="profile"
+                    label="My Profile"
+                    icon="person-outline"
+                    onPress={() => router.push('/(user)/(tabs)/profile')}
+                    colors={colors}
+                />
                 <DrawerItemRow
                     key="home"
                     label="Home"

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, ScrollView, ActivityIndicator, Pressable, Modal, Dimensions, RefreshControl } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../../constants/ThemeContext';
@@ -7,6 +7,7 @@ import { API_URL } from '../../../constants/Config';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 import { Calendar } from 'react-native-calendars';
+import { router, useFocusEffect } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 const CHART_WIDTH = width - 70;
@@ -88,13 +89,22 @@ const UserDiet = () => {
         return streak;
     };
 
+    const isProfileComplete = Boolean(
+        memberData?.email && memberData.email.trim() !== '' &&
+        memberData?.dob && memberData.dob.trim() !== '' &&
+        memberData?.gender && memberData.gender.trim() !== '' &&
+        memberData?.bloodGroup && memberData.bloodGroup.trim() !== '' &&
+        memberData?.address && memberData.address.trim() !== ''
+    );
+
     const fetchData = async () => {
         setLoading(true);
         try {
             const userJson = await AsyncStorage.getItem('userData');
             const user = JSON.parse(userJson);
 
-            const memberRes = await axios.get(`${API_URL}/members/${user.email || user._id}`);
+            const identifier = user.memberId || user.email || user._id;
+            const memberRes = await axios.get(`${API_URL}/members/${identifier}`);
             const member = memberRes.data;
             setMemberData(member);
 
@@ -232,10 +242,52 @@ const UserDiet = () => {
         selectedColor: '#4CAF50',
     };
 
+    useFocusEffect(
+        useCallback(() => {
+            fetchData();
+        }, [])
+    );
+
     if (loading) {
         return (
             <View style={[styles.container, { justifyContent: 'center' }]}>
                 <ActivityIndicator size="large" color={colors.primary} />
+            </View>
+        );
+    }
+
+    if (!loading && memberData && !isProfileComplete) {
+        return (
+            <View style={[styles.container, { justifyContent: 'center', alignItems: 'center', padding: 25 }]}>
+                <View style={{
+                    width: 72, height: 72, borderRadius: 36,
+                    backgroundColor: '#FF980020',
+                    justifyContent: 'center', alignItems: 'center',
+                    marginBottom: 16
+                }}>
+                    <Ionicons name="lock-closed" size={36} color="#FF9800" />
+                </View>
+                <Text style={{ fontSize: 20, fontWeight: 'bold', color: colors.text, textAlign: 'center', marginBottom: 8 }}>
+                    Profile Completion Required
+                </Text>
+                <Text style={{ fontSize: 14, color: colors.secondary, textAlign: 'center', lineHeight: 20, marginBottom: 24 }}>
+                    Your admin created your basic account. Please complete your essential profile details (Email, DOB, Gender, Blood Group, Address) to unlock your diet plan.
+                </Text>
+                <Pressable
+                    style={{
+                        backgroundColor: colors.primary,
+                        borderRadius: 12,
+                        paddingVertical: 14,
+                        paddingHorizontal: 24,
+                        flexDirection: 'row',
+                        alignItems: 'center',
+                        gap: 8
+                    }}
+                    onPress={() => router.push('/(user)/(tabs)/profile')}
+                >
+                    <Text style={{ color: '#FFF', fontWeight: 'bold', fontSize: 15 }}>Complete Profile Now</Text>
+                    <Ionicons name="arrow-forward" size={18} color="#FFF" />
+                </Pressable>
             </View>
         );
     }

@@ -63,33 +63,54 @@ router.post("/login", async (req, res) => {
         let role = null;
         let memberDetails = null;
 
-        if (email.toLowerCase().endsWith("@bigbuddy.com")) {
+        const identifier = (email || "").trim();
+
+        if (identifier.toLowerCase().endsWith("@bigbuddy.com")) {
             // Check User collection for Admins
-            user = await User.findOne({ email });
+            user = await User.findOne({ email: identifier.toLowerCase() });
             if (user && (await user.comparePassword(password))) {
                 role = user.role || "admin";
             } else {
                 return res.status(401).json({ message: "Invalid admin email or password" });
             }
         } else {
-            // Check Member collection for Gym Users
-            const member = await Member.findOne({ email });
+            // Check Member collection for Gym Users (supports Email, Phone, or Member ID)
+            const member = await Member.findOne({
+                $or: [
+                    { email: identifier.toLowerCase() },
+                    { phone: identifier },
+                    { memberID: identifier.toUpperCase() },
+                    { memberID: identifier }
+                ]
+            });
             if (member && (await bcrypt.compare(password, member.password))) {
                 user = member;
                 role = "member";
                 memberDetails = member;
             } else {
-                return res.status(401).json({ message: "Invalid user email or password" });
+                return res.status(401).json({ message: "Invalid credentials (Member ID, Phone, or Email with Password)" });
             }
         }
+
+        const isProfileComplete = memberDetails
+            ? Boolean(
+                memberDetails.email && memberDetails.email.trim() !== '' &&
+                memberDetails.dob && memberDetails.dob.trim() !== '' &&
+                memberDetails.gender && memberDetails.gender.trim() !== '' &&
+                memberDetails.bloodGroup && memberDetails.bloodGroup.trim() !== '' &&
+                memberDetails.address && memberDetails.address.trim() !== ''
+            )
+            : true;
 
         res.json({
             _id: user._id,
             name: user.name,
-            email: user.email,
+            email: user.email || "",
             role: role,
             token: generateToken(user._id),
-            memberId: memberDetails ? memberDetails.memberID : null
+            memberId: memberDetails ? memberDetails.memberID : null,
+            phone: memberDetails ? memberDetails.phone : null,
+            isProfileComplete: isProfileComplete
         });
     } catch (error) {
         console.error("Login error:", error);

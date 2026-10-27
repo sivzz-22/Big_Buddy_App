@@ -1,11 +1,11 @@
 import { View, Text, StyleSheet, ScrollView, Pressable, Dimensions, RefreshControl, TextInput, Modal, Alert, ActivityIndicator } from 'react-native';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useTheme } from '../../../constants/ThemeContext';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_URL } from '../../../constants/Config';
-import { router } from 'expo-router';
+import { router, useFocusEffect } from 'expo-router';
 import { LineChart, BarChart } from 'react-native-chart-kit';
 
 const { width } = Dimensions.get('window');
@@ -31,7 +31,6 @@ const UserDashboard = () => {
     const [attendanceStats, setAttendanceStats] = useState({ present: 0, total: 25, streak: 0 });
     const [refreshing, setRefreshing] = useState(false);
     const [loading, setLoading] = useState(true);
-    const [isProfileExpanded, setIsProfileExpanded] = useState(false);
     const [metricsModalVisible, setMetricsModalVisible] = useState(false);
     const [todayMetrics, setTodayMetrics] = useState({ weight: '', waterIntake: '', steps: '', mood: 'Good' });
     const [historyLogs, setHistoryLogs] = useState([]);
@@ -40,13 +39,23 @@ const UserDashboard = () => {
     const today = new Date().toISOString().split('T')[0];
     const styles = getStyles(colors);
 
+    // Compute profile completeness (essential details filled by member)
+    const isProfileComplete = Boolean(
+        memberData?.email && memberData.email.trim() !== '' &&
+        memberData?.dob && memberData.dob.trim() !== '' &&
+        memberData?.gender && memberData.gender.trim() !== '' &&
+        memberData?.bloodGroup && memberData.bloodGroup.trim() !== '' &&
+        memberData?.address && memberData.address.trim() !== ''
+    );
+
     const fetchData = async () => {
         try {
             const userJson = await AsyncStorage.getItem('userData');
             const user = JSON.parse(userJson);
             setUserData(user);
 
-            const memberRes = await axios.get(`${API_URL}/members/${user.email || user._id}`);
+            const identifier = user.memberId || user.email || user._id;
+            const memberRes = await axios.get(`${API_URL}/members/${identifier}`);
             const memberDoc = memberRes.data;
             setMemberData(memberDoc);
 
@@ -88,7 +97,44 @@ const UserDashboard = () => {
     };
 
     useEffect(() => { fetchData(); }, []);
+
+    useFocusEffect(
+        useCallback(() => {
+            fetchData();
+        }, [])
+    );
+
     const onRefresh = () => { setRefreshing(true); fetchData(); };
+
+    const handleCheckIn = () => {
+        if (!isProfileComplete) {
+            Alert.alert(
+                "Profile Incomplete",
+                "Please complete your essential profile details (Email, DOB, Gender, Blood Group, Address) before accessing attendance.",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Complete Profile", onPress: () => router.push('/(user)/(tabs)/profile') }
+                ]
+            );
+            return;
+        }
+        router.push('/(user)/(tabs)/attendance');
+    };
+
+    const handleOpenMetrics = () => {
+        if (!isProfileComplete) {
+            Alert.alert(
+                "Profile Incomplete",
+                "Please complete your essential profile details before logging daily metrics.",
+                [
+                    { text: "Cancel", style: "cancel" },
+                    { text: "Complete Profile", onPress: () => router.push('/(user)/(tabs)/profile') }
+                ]
+            );
+            return;
+        }
+        setMetricsModalVisible(true);
+    };
 
     const handleSaveMetrics = async () => {
         setSavingMetrics(true);
@@ -225,90 +271,70 @@ const UserDashboard = () => {
                 </View>
             </View>
 
-            {/* Profile Dropdown */}
-            <Pressable
-                style={[styles.profileSection, isProfileExpanded && styles.profileSectionActive]}
-                onPress={() => setIsProfileExpanded(!isProfileExpanded)}
-            >
-                <View style={styles.profileHeaderRow}>
-                    <View style={styles.profileAvatar}>
-                        <Text style={styles.profileAvatarText}>{userData?.name?.charAt(0) || 'B'}</Text>
+            {/* Profile Incompletion Restriction Alert */}
+            {!isProfileComplete && (
+                <View style={styles.restrictionCard}>
+                    <View style={styles.restrictionHeader}>
+                        <Ionicons name="alert-circle" size={24} color="#FF9800" />
+                        <Text style={styles.restrictionTitle}>Profile Details Incomplete</Text>
                     </View>
-                    <View style={{ flex: 1, marginLeft: 15 }}>
-                        <Text style={styles.profileNameMain}>{userData?.name}</Text>
-                        <Text style={styles.profileIdMain}>{memberData?.memberID} • {memberData?.subscriptionType || 'No Plan'}</Text>
+                    <Text style={styles.restrictionText}>
+                        Your account was created by the admin. Please fill in your essential details (Email, DOB, Gender, Blood Group, Address) in your profile to continue using all features.
+                    </Text>
+                    <Pressable
+                        style={styles.restrictionBtn}
+                        onPress={() => router.push('/(user)/(tabs)/profile')}
+                    >
+                        <Text style={styles.restrictionBtnText}>Complete Profile Now</Text>
+                        <Ionicons name="arrow-forward" size={16} color="#FFFFFF" />
+                    </Pressable>
+                </View>
+            )}
+
+            {/* Standalone Today's Metrics Card (No dropdown, no profile details) */}
+            <View style={styles.todayMetricsCard}>
+                <View style={styles.todayMetricsHeader}>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons name="analytics" size={20} color={colors.primary} />
+                        <Text style={styles.todayMetricsTitle}>TODAY'S METRICS</Text>
                     </View>
-                    <Ionicons name={isProfileExpanded ? "chevron-up" : "chevron-down"} size={20} color={colors.secondary} />
+                    <Text style={styles.todayDateText}>{today}</Text>
                 </View>
 
-                {isProfileExpanded && (
-                    <View style={{ marginTop: 20, paddingTop: 20, borderTopWidth: 1, borderTopColor: colors.border }}>
-                        <Text style={styles.profileSectionLabel}>PHYSICAL STATS</Text>
-                        <View style={styles.profileGrid}>
-                            {[
-                                { label: 'Height', val: memberData?.height ? `${memberData.height} cm` : '--' },
-                                { label: 'Weight', val: memberData?.weight ? `${memberData.weight} kg` : '--' },
-                                { label: 'Blood Group', val: memberData?.bloodGroup || '--' },
-                                { label: 'Waist Size', val: memberData?.waistSize ? `${memberData.waistSize} cm` : '--' },
-                            ].map(item => (
-                                <View key={item.label} style={styles.profileGridItem}>
-                                    <Text style={styles.profileGridLabel}>{item.label}</Text>
-                                    <Text style={styles.profileGridVal}>{item.val}</Text>
-                                </View>
-                            ))}
-                        </View>
-
-                        <Text style={[styles.profileSectionLabel, { marginTop: 15 }]}>TODAY'S METRICS</Text>
-                        <View style={styles.metricsRow}>
-                            <View style={styles.metricChip}>
-                                <Ionicons name="scale-outline" size={18} color={colors.primary} />
-                                <Text style={styles.metricChipVal}>{todayMetrics.weight || '--'} kg</Text>
-                                <Text style={styles.metricChipLabel}>Weight</Text>
-                            </View>
-                            <View style={styles.metricChip}>
-                                <Ionicons name="water-outline" size={18} color="#2196F3" />
-                                <Text style={styles.metricChipVal}>{todayMetrics.waterIntake || '--'} L</Text>
-                                <Text style={styles.metricChipLabel}>Water</Text>
-                            </View>
-                            <View style={styles.metricChip}>
-                                <MaterialCommunityIcons name="shoe-print" size={18} color="#4CAF50" />
-                                <Text style={styles.metricChipVal}>{todayMetrics.steps || '--'}</Text>
-                                <Text style={styles.metricChipLabel}>Steps</Text>
-                            </View>
-                            <View style={styles.metricChip}>
-                                <Text style={{ fontSize: 18 }}>{moodEmoji[todayMetrics.mood] || '😊'}</Text>
-                                <Text style={styles.metricChipVal}>{todayMetrics.mood}</Text>
-                                <Text style={styles.metricChipLabel}>Mood</Text>
-                            </View>
-                        </View>
-                        <Pressable style={styles.logMetricsBtn} onPress={() => setMetricsModalVisible(true)}>
-                            <Ionicons name="add-circle-outline" size={18} color={colors.buttonPrimaryText} />
-                            <Text style={styles.logMetricsBtnText}>LOG TODAY'S METRICS</Text>
-                        </Pressable>
-
-                        <Text style={[styles.profileSectionLabel, { marginTop: 15 }]}>CONTACT</Text>
-                        <View style={styles.profileGrid}>
-                            {[
-                                { label: 'Phone', val: memberData?.phone || '--' },
-                                { label: 'Email', val: memberData?.email || '--' },
-                                { label: 'D.O.B', val: memberData?.dob || '--' },
-                                { label: 'Gender', val: memberData?.gender || '--' },
-                            ].map(item => (
-                                <View key={item.label} style={styles.profileGridItem}>
-                                    <Text style={styles.profileGridLabel}>{item.label}</Text>
-                                    <Text style={styles.profileGridVal}>{item.val}</Text>
-                                </View>
-                            ))}
-                        </View>
+                <View style={styles.metricsRow}>
+                    <View style={styles.metricChip}>
+                        <Ionicons name="scale-outline" size={18} color={colors.primary} />
+                        <Text style={styles.metricChipVal}>{todayMetrics.weight ? `${todayMetrics.weight} kg` : '--'}</Text>
+                        <Text style={styles.metricChipLabel}>Weight</Text>
                     </View>
-                )}
-            </Pressable>
+                    <View style={styles.metricChip}>
+                        <Ionicons name="water-outline" size={18} color="#2196F3" />
+                        <Text style={styles.metricChipVal}>{todayMetrics.waterIntake ? `${todayMetrics.waterIntake} L` : '--'}</Text>
+                        <Text style={styles.metricChipLabel}>Water</Text>
+                    </View>
+                    <View style={styles.metricChip}>
+                        <MaterialCommunityIcons name="shoe-print" size={18} color="#4CAF50" />
+                        <Text style={styles.metricChipVal}>{todayMetrics.steps || '--'}</Text>
+                        <Text style={styles.metricChipLabel}>Steps</Text>
+                    </View>
+                    <View style={styles.metricChip}>
+                        <Text style={{ fontSize: 18 }}>{moodEmoji[todayMetrics.mood] || '😊'}</Text>
+                        <Text style={styles.metricChipVal}>{todayMetrics.mood}</Text>
+                        <Text style={styles.metricChipLabel}>Mood</Text>
+                    </View>
+                </View>
+
+                <Pressable style={styles.logMetricsBtn} onPress={handleOpenMetrics}>
+                    <Ionicons name="add-circle-outline" size={18} color={colors.buttonPrimaryText} />
+                    <Text style={styles.logMetricsBtnText}>LOG TODAY'S METRICS</Text>
+                </Pressable>
+            </View>
 
             {/* Quick Actions — 2 cards only */}
             <View style={styles.quickActions}>
                 <Pressable
                     style={[styles.quickBtn, { backgroundColor: colors.primary }]}
-                    onPress={() => router.push('/(user)/(tabs)/attendance')}
+                    onPress={handleCheckIn}
                 >
                     <Ionicons name="qr-code-outline" size={28} color="#FFF" />
                     <Text style={styles.quickBtnTitle}>Check-In</Text>
@@ -316,7 +342,7 @@ const UserDashboard = () => {
                 </Pressable>
                 <Pressable
                     style={[styles.quickBtn, { backgroundColor: colors.surface, borderWidth: 1.5, borderColor: colors.primary }]}
-                    onPress={() => setMetricsModalVisible(true)}
+                    onPress={handleOpenMetrics}
                 >
                     <Ionicons name="analytics-outline" size={28} color={colors.primary} />
                     <Text style={[styles.quickBtnTitle, { color: colors.primary }]}>Metrics</Text>
@@ -531,23 +557,80 @@ const getStyles = (colors) => StyleSheet.create({
     statDen: { fontSize: 14, color: colors.secondary },
     statSub: { color: colors.secondary, fontSize: 10, marginTop: 2 },
 
-    profileSection: { backgroundColor: colors.surface, borderRadius: 20, padding: 18, marginBottom: 20, borderWidth: 1, borderColor: colors.border },
-    profileSectionActive: { borderColor: colors.primary },
-    profileHeaderRow: { flexDirection: 'row', alignItems: 'center' },
-    profileAvatar: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.primary + '20', justifyContent: 'center', alignItems: 'center', borderWidth: 1.5, borderColor: colors.primary },
-    profileAvatarText: { color: colors.primary, fontSize: 18, fontWeight: 'bold' },
-    profileNameMain: { fontSize: 17, fontWeight: 'bold', color: colors.text },
-    profileIdMain: { fontSize: 12, color: colors.secondary, marginTop: 2 },
-    profileSectionLabel: { fontSize: 11, fontWeight: 'bold', color: colors.secondary, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 10 },
-    profileGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
-    profileGridItem: { width: '47%' },
-    profileGridLabel: { fontSize: 10, color: colors.secondary, textTransform: 'uppercase' },
-    profileGridVal: { fontSize: 14, fontWeight: 'bold', color: colors.text, marginTop: 2 },
-    metricsRow: { flexDirection: 'row', gap: 10, marginTop: 5 },
+    // Restriction Banner
+    restrictionCard: {
+        backgroundColor: '#FF980018',
+        borderColor: '#FF980060',
+        borderWidth: 1.5,
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 20,
+    },
+    restrictionHeader: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+        marginBottom: 6,
+    },
+    restrictionTitle: {
+        fontSize: 15,
+        fontWeight: 'bold',
+        color: '#FF9800',
+    },
+    restrictionText: {
+        fontSize: 12,
+        color: colors.text,
+        lineHeight: 18,
+        marginBottom: 12,
+    },
+    restrictionBtn: {
+        backgroundColor: '#FF9800',
+        borderRadius: 10,
+        paddingVertical: 10,
+        paddingHorizontal: 14,
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 8,
+        alignSelf: 'flex-start',
+    },
+    restrictionBtnText: {
+        color: '#FFFFFF',
+        fontSize: 13,
+        fontWeight: 'bold',
+    },
+
+    // Today's Metrics Standalone Card
+    todayMetricsCard: {
+        backgroundColor: colors.surface,
+        borderRadius: 18,
+        padding: 18,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: colors.border,
+    },
+    todayMetricsHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: 14,
+    },
+    todayMetricsTitle: {
+        fontSize: 13,
+        fontWeight: 'bold',
+        color: colors.primary,
+        letterSpacing: 0.5,
+    },
+    todayDateText: {
+        fontSize: 12,
+        color: colors.secondary,
+        fontWeight: '500',
+    },
+    metricsRow: { flexDirection: 'row', gap: 10 },
     metricChip: { flex: 1, backgroundColor: colors.background, borderRadius: 12, padding: 10, alignItems: 'center', borderWidth: 1, borderColor: colors.border, gap: 4 },
     metricChipVal: { fontSize: 13, fontWeight: 'bold', color: colors.text },
     metricChipLabel: { fontSize: 9, color: colors.secondary, textTransform: 'uppercase' },
-    logMetricsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, borderRadius: 10, padding: 12, marginTop: 12, gap: 8 },
+    logMetricsBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, borderRadius: 10, padding: 12, marginTop: 14, gap: 8 },
     logMetricsBtnText: { color: colors.buttonPrimaryText, fontWeight: 'bold', fontSize: 13 },
 
     // 2 Quick Action Cards

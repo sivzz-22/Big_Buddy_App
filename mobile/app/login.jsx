@@ -119,10 +119,10 @@ const Login = () => {
       <Text style={styles.subHeader}>Sign in to continue</Text>
 
       <View style={styles.inputContainer}>
-        <Text style={styles.label}>EMAIL</Text>
+        <Text style={styles.label}>EMAIL / MEMBER ID / PHONE</Text>
         <TextInput
           style={styles.input}
-          placeholder="admin@bigbuddy.com"
+          placeholder="e.g. 26MAR001, phone, or email"
           placeholderTextColor={colors.secondary}
           value={email}
           onChangeText={setEmail}

@@ -187,6 +187,16 @@ export default function UserTabLayout() {
                     },
                 }}
             />
+            {/* profile screen registered but hidden from tab bar */}
+            <Tabs.Screen
+                name="profile"
+                options={{
+                    title: 'Profile',
+                    headerTitle: 'MY PROFILE',
+                    tabBarButton: () => null,
+                    tabBarItemStyle: { display: 'none' },
+                }}
+            />
         </Tabs>
     );
 }
