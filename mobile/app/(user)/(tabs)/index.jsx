@@ -6,6 +6,7 @@ import {
     ScrollView,
     Pressable,
     Dimensions,
+    useWindowDimensions,
     RefreshControl,
     TextInput,
     Modal,
@@ -84,6 +85,14 @@ const UserDashboard = () => {
         memberData?.address && memberData.address.trim() !== ''
     );
 
+    // Exact GPay-style centered cutout dimensions
+    const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+    const screenW = windowWidth || Dimensions.get('window').width || 360;
+    const screenH = windowHeight || Dimensions.get('window').height || 800;
+    const BOX_SIZE = Math.min(Math.round(screenW * 0.74), 270);
+    const BOX_TOP = Math.max(80, Math.round((screenH - BOX_SIZE) / 2) - 40);
+    const BOX_LEFT = Math.round((screenW - BOX_SIZE) / 2);
+
     // Loop scan line animation when camera is open
     useEffect(() => {
         let anim;
@@ -92,7 +101,7 @@ const UserDashboard = () => {
             anim = Animated.loop(
                 Animated.sequence([
                     Animated.timing(scanLineAnim, {
-                        toValue: 240,
+                        toValue: BOX_SIZE - 10,
                         duration: 1800,
                         useNativeDriver: true,
                     }),
@@ -108,7 +117,7 @@ const UserDashboard = () => {
         return () => {
             if (anim) anim.stop();
         };
-    }, [scanning]);
+    }, [scanning, BOX_SIZE]);
 
     // Hardware back press listener for Android scanner
     useEffect(() => {
@@ -671,7 +680,7 @@ const UserDashboard = () => {
             <View style={[StyleSheet.absoluteFill, { zIndex: 9999, elevation: 9999, backgroundColor: '#000000' }]}>
                 <StatusBar barStyle="light-content" backgroundColor="#000000" translucent />
 
-                {/* Live Camera Feed */}
+                {/* 1. Fullscreen Live Camera Feed */}
                 <CameraView
                     style={StyleSheet.absoluteFill}
                     facing="back"
@@ -682,46 +691,66 @@ const UserDashboard = () => {
                     onBarcodeScanned={scannedRef.current ? undefined : handleBarCodeScanned}
                 />
 
-                {/* 1. Top Header Bar (pinned to top) */}
-                <View style={styles.scannerHeader}>
-                    <Pressable style={styles.scannerIconButton} onPress={() => setScanning(false)}>
-                        <Ionicons name="close" size={26} color="#FFFFFF" />
-                    </Pressable>
-                    <Text style={styles.scannerHeaderTitle}>Scan to Check-In</Text>
-                    <Pressable style={styles.scannerIconButton} onPress={() => setTorchOn(prev => !prev)}>
-                        <Ionicons name={torchOn ? "flash" : "flash-off"} size={22} color={torchOn ? colors.primary : "#FFFFFF"} />
-                    </Pressable>
-                </View>
+                {/* 2. GPay-Style Semi-Transparent Dark Mask with Centered Cutout Window */}
+                <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
+                    {/* Top Scrim */}
+                    <View style={{ width: screenW, height: BOX_TOP, backgroundColor: 'rgba(0, 0, 0, 0.65)' }} />
 
-                {/* 2. Interactive Reticle Viewfinder (DEAD CENTER of screen!) */}
-                <View style={styles.centeredReticleWrapper} pointerEvents="box-none">
-                    <View style={styles.viewfinder}>
-                        {/* Corner Accents */}
-                        <View style={[styles.corner, styles.cornerTL]} />
-                        <View style={[styles.corner, styles.cornerTR]} />
-                        <View style={[styles.corner, styles.cornerBL]} />
-                        <View style={[styles.corner, styles.cornerBR]} />
+                    {/* Middle Row: Left Scrim + Transparent Viewfinder Box + Right Scrim */}
+                    <View style={{ flexDirection: 'row', height: BOX_SIZE, width: screenW }}>
+                        {/* Left Scrim */}
+                        <View style={{ width: BOX_LEFT, backgroundColor: 'rgba(0, 0, 0, 0.65)' }} />
 
-                        {/* Moving Laser Scan Line */}
-                        <Animated.View
-                            style={[
-                                styles.laserLine,
-                                {
-                                    transform: [{ translateY: scanLineAnim }]
-                                }
-                            ]}
-                        />
+                        {/* Viewfinder Cutout Box (Dead Center!) */}
+                        <View style={[styles.cutoutBox, { width: BOX_SIZE, height: BOX_SIZE }]}>
+                            {/* 4 Colored Corner Accents (Like GPay in Image 2) */}
+                            <View style={[styles.corner, styles.cornerTL, { borderColor: '#EA4335' }]} />
+                            <View style={[styles.corner, styles.cornerTR, { borderColor: '#FBBC04' }]} />
+                            <View style={[styles.corner, styles.cornerBL, { borderColor: '#4285F4' }]} />
+                            <View style={[styles.corner, styles.cornerBR, { borderColor: '#34A853' }]} />
+
+                            {/* Moving Laser Scan Line */}
+                            <Animated.View
+                                style={[
+                                    styles.laserLine,
+                                    {
+                                        transform: [{ translateY: scanLineAnim }]
+                                    }
+                                ]}
+                            />
+                        </View>
+
+                        {/* Right Scrim */}
+                        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)' }} />
                     </View>
 
-                    {/* Instruction pill floating right below the reticle */}
-                    <View style={styles.instructionWrap}>
-                        <Text style={styles.scannerInstruction}>
+                    {/* Bottom Scrim */}
+                    <View style={{
+                        width: screenW,
+                        flex: 1,
+                        backgroundColor: 'rgba(0, 0, 0, 0.65)',
+                        alignItems: 'center',
+                        paddingTop: 24,
+                    }}>
+                        {/* Instruction text directly below the box like GPay */}
+                        <Text style={styles.scannerInstructionText}>
                             Align gym QR code within the frame
                         </Text>
                     </View>
                 </View>
 
-                {/* 3. Bottom Actions Overlay (pinned to bottom) */}
+                {/* 3. Top Header Bar (Close button & Flash toggle) */}
+                <View style={styles.scannerHeader}>
+                    <Pressable style={styles.scannerIconButton} onPress={() => setScanning(false)}>
+                        <Ionicons name="close" size={24} color="#FFFFFF" />
+                    </Pressable>
+                    <Text style={styles.scannerHeaderTitle}>Scan to Check-In</Text>
+                    <Pressable style={styles.scannerIconButton} onPress={() => setTorchOn(prev => !prev)}>
+                        <Ionicons name={torchOn ? "flash" : "flash-off"} size={22} color={torchOn ? "#FFEB3B" : "#FFFFFF"} />
+                    </Pressable>
+                </View>
+
+                {/* 4. Bottom Action Button (White Pill like GPay "Show your Spot code") */}
                 <View style={styles.scannerBottom}>
                     <Pressable
                         style={styles.manualCodeBtn}
@@ -730,7 +759,7 @@ const UserDashboard = () => {
                             setTimeout(() => setShowCodeModal(true), 300);
                         }}
                     >
-                        <Ionicons name="keypad-outline" size={20} color="#000000" />
+                        <Ionicons name="keypad" size={18} color="#111111" />
                         <Text style={styles.manualCodeBtnText}>Enter Access Code Manually</Text>
                     </Pressable>
                 </View>
@@ -1124,7 +1153,7 @@ const getStyles = (colors) => StyleSheet.create({
         top: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) + 12 : 50,
         left: 20,
         right: 20,
-        zIndex: 20,
+        zIndex: 30,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'space-between',
@@ -1133,63 +1162,58 @@ const getStyles = (colors) => StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 22,
-        backgroundColor: 'rgba(0,0,0,0.65)',
+        backgroundColor: 'rgba(0, 0, 0, 0.45)',
         justifyContent: 'center',
         alignItems: 'center',
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.2)',
     },
     scannerHeaderTitle: {
         color: '#FFFFFF',
-        fontSize: 18,
+        fontSize: 17,
         fontWeight: 'bold',
         letterSpacing: 0.5,
     },
-    centeredReticleWrapper: {
-        ...StyleSheet.absoluteFillObject,
-        justifyContent: 'center',
-        alignItems: 'center',
-        zIndex: 10,
-    },
-    viewfinder: {
-        width: 260,
-        height: 260,
+    cutoutBox: {
         position: 'relative',
-        borderRadius: 20,
-        overflow: 'hidden',
+        borderRadius: 22,
+        borderWidth: 1.5,
+        borderColor: 'rgba(255, 255, 255, 0.3)',
         backgroundColor: 'transparent',
+        overflow: 'hidden',
     },
     corner: {
         position: 'absolute',
-        width: 36,
-        height: 36,
-        borderColor: colors.primary,
+        width: 40,
+        height: 40,
     },
     cornerTL: {
-        top: 0,
-        left: 0,
-        borderTopWidth: 4,
-        borderLeftWidth: 4,
-        borderTopLeftRadius: 18,
+        top: -1,
+        left: -1,
+        borderTopWidth: 5,
+        borderLeftWidth: 5,
+        borderTopLeftRadius: 22,
     },
     cornerTR: {
-        top: 0,
-        right: 0,
-        borderTopWidth: 4,
-        borderRightWidth: 4,
-        borderTopRightRadius: 18,
+        top: -1,
+        right: -1,
+        borderTopWidth: 5,
+        borderRightWidth: 5,
+        borderTopRightRadius: 22,
     },
     cornerBL: {
-        bottom: 0,
-        left: 0,
-        borderBottomWidth: 4,
-        borderLeftWidth: 4,
-        borderBottomLeftRadius: 18,
+        bottom: -1,
+        left: -1,
+        borderBottomWidth: 5,
+        borderLeftWidth: 5,
+        borderBottomLeftRadius: 22,
     },
     cornerBR: {
-        bottom: 0,
-        right: 0,
-        borderBottomWidth: 4,
-        borderRightWidth: 4,
-        borderBottomRightRadius: 18,
+        bottom: -1,
+        right: -1,
+        borderBottomWidth: 5,
+        borderRightWidth: 5,
+        borderBottomRightRadius: 22,
     },
     laserLine: {
         height: 3,
@@ -1201,20 +1225,14 @@ const getStyles = (colors) => StyleSheet.create({
         shadowRadius: 10,
         elevation: 6,
     },
-    instructionWrap: {
-        marginTop: 22,
-        alignItems: 'center',
-    },
-    scannerInstruction: {
+    scannerInstructionText: {
         color: '#FFFFFF',
-        fontSize: 14,
-        fontWeight: '600',
+        fontSize: 15,
+        fontWeight: '500',
         textAlign: 'center',
-        backgroundColor: 'rgba(0,0,0,0.65)',
-        paddingHorizontal: 18,
-        paddingVertical: 9,
-        borderRadius: 20,
-        overflow: 'hidden',
+        letterSpacing: 0.3,
+        paddingHorizontal: 30,
+        lineHeight: 22,
     },
     scannerBottom: {
         position: 'absolute',
@@ -1222,22 +1240,27 @@ const getStyles = (colors) => StyleSheet.create({
         left: 0,
         right: 0,
         alignItems: 'center',
-        zIndex: 20,
+        zIndex: 30,
     },
     manualCodeBtn: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 8,
-        backgroundColor: colors.primary,
-        paddingHorizontal: 24,
+        gap: 10,
+        backgroundColor: '#FFFFFF',
+        paddingHorizontal: 26,
         paddingVertical: 14,
-        borderRadius: 24,
+        borderRadius: 26,
         elevation: 6,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 3 },
+        shadowOpacity: 0.25,
+        shadowRadius: 6,
     },
     manualCodeBtnText: {
-        color: colors.buttonPrimaryText,
-        fontWeight: 'bold',
+        color: '#111111',
+        fontWeight: '700',
         fontSize: 14,
+        letterSpacing: 0.2,
     },
 });
 
