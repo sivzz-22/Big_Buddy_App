@@ -86,12 +86,9 @@ const UserDashboard = () => {
     );
 
     // Exact GPay-style centered cutout dimensions
-    const { width: windowWidth, height: windowHeight } = useWindowDimensions();
+    const { width: windowWidth } = useWindowDimensions();
     const screenW = windowWidth || Dimensions.get('window').width || 360;
-    const screenH = windowHeight || Dimensions.get('window').height || 800;
-    const BOX_SIZE = Math.min(Math.round(screenW * 0.74), 270);
-    const BOX_TOP = Math.max(80, Math.round((screenH - BOX_SIZE) / 2) - 40);
-    const BOX_LEFT = Math.round((screenW - BOX_SIZE) / 2);
+    const BOX_SIZE = Math.min(Math.round(screenW * 0.74), 280);
 
     // Loop scan line animation when camera is open
     useEffect(() => {
@@ -693,17 +690,17 @@ const UserDashboard = () => {
 
                 {/* 2. GPay-Style Semi-Transparent Dark Mask with Centered Cutout Window */}
                 <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-                    {/* Top Scrim */}
-                    <View style={{ width: screenW, height: BOX_TOP, backgroundColor: 'rgba(0, 0, 0, 0.65)' }} />
+                    {/* Top Scrim - flex 1 pushes box to absolute vertical center */}
+                    <View style={{ flex: 1, width: '100%', backgroundColor: 'rgba(0, 0, 0, 0.65)' }} />
 
                     {/* Middle Row: Left Scrim + Transparent Viewfinder Box + Right Scrim */}
-                    <View style={{ flexDirection: 'row', height: BOX_SIZE, width: screenW }}>
+                    <View style={{ flexDirection: 'row', height: BOX_SIZE, width: '100%' }}>
                         {/* Left Scrim */}
-                        <View style={{ width: BOX_LEFT, backgroundColor: 'rgba(0, 0, 0, 0.65)' }} />
+                        <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)' }} />
 
                         {/* Viewfinder Cutout Box (Dead Center!) */}
                         <View style={[styles.cutoutBox, { width: BOX_SIZE, height: BOX_SIZE }]}>
-                            {/* 4 Colored Corner Accents (Like GPay in Image 2) */}
+                            {/* 4 Colored Corner Accents (Like GPay in Image 2: Red TL, Yellow TR, Blue BL, Green BR) */}
                             <View style={[styles.corner, styles.cornerTL, { borderColor: '#EA4335' }]} />
                             <View style={[styles.corner, styles.cornerTR, { borderColor: '#FBBC04' }]} />
                             <View style={[styles.corner, styles.cornerBL, { borderColor: '#4285F4' }]} />
@@ -724,10 +721,10 @@ const UserDashboard = () => {
                         <View style={{ flex: 1, backgroundColor: 'rgba(0, 0, 0, 0.65)' }} />
                     </View>
 
-                    {/* Bottom Scrim */}
+                    {/* Bottom Scrim - flex 1 balances top scrim */}
                     <View style={{
-                        width: screenW,
                         flex: 1,
+                        width: '100%',
                         backgroundColor: 'rgba(0, 0, 0, 0.65)',
                         alignItems: 'center',
                         paddingTop: 24,
@@ -742,9 +739,8 @@ const UserDashboard = () => {
                 {/* 3. Top Header Bar (Close button & Flash toggle) */}
                 <View style={styles.scannerHeader}>
                     <Pressable style={styles.scannerIconButton} onPress={() => setScanning(false)}>
-                        <Ionicons name="close" size={24} color="#FFFFFF" />
+                        <Ionicons name="close" size={26} color="#FFFFFF" />
                     </Pressable>
-                    <Text style={styles.scannerHeaderTitle}>Scan to Check-In</Text>
                     <Pressable style={styles.scannerIconButton} onPress={() => setTorchOn(prev => !prev)}>
                         <Ionicons name={torchOn ? "flash" : "flash-off"} size={22} color={torchOn ? "#FFEB3B" : "#FFFFFF"} />
                     </Pressable>
@@ -1176,44 +1172,44 @@ const getStyles = (colors) => StyleSheet.create({
     },
     cutoutBox: {
         position: 'relative',
-        borderRadius: 22,
+        borderRadius: 24,
         borderWidth: 1.5,
-        borderColor: 'rgba(255, 255, 255, 0.3)',
+        borderColor: 'rgba(255, 255, 255, 0.25)',
         backgroundColor: 'transparent',
         overflow: 'hidden',
     },
     corner: {
         position: 'absolute',
-        width: 40,
-        height: 40,
+        width: 44,
+        height: 44,
     },
     cornerTL: {
-        top: -1,
-        left: -1,
+        top: -2,
+        left: -2,
         borderTopWidth: 5,
         borderLeftWidth: 5,
-        borderTopLeftRadius: 22,
+        borderTopLeftRadius: 24,
     },
     cornerTR: {
-        top: -1,
-        right: -1,
+        top: -2,
+        right: -2,
         borderTopWidth: 5,
         borderRightWidth: 5,
-        borderTopRightRadius: 22,
+        borderTopRightRadius: 24,
     },
     cornerBL: {
-        bottom: -1,
-        left: -1,
+        bottom: -2,
+        left: -2,
         borderBottomWidth: 5,
         borderLeftWidth: 5,
-        borderBottomLeftRadius: 22,
+        borderBottomLeftRadius: 24,
     },
     cornerBR: {
-        bottom: -1,
-        right: -1,
+        bottom: -2,
+        right: -2,
         borderBottomWidth: 5,
         borderRightWidth: 5,
-        borderBottomRightRadius: 22,
+        borderBottomRightRadius: 24,
     },
     laserLine: {
         height: 3,
