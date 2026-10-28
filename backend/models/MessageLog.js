@@ -15,6 +15,9 @@ const messageLogSchema = new mongoose.Schema({
     timestamps: true
 });
 
+// Auto-delete messages older than 30 days (1 month TTL)
+messageLogSchema.index({ createdAt: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
+
 const MessageLog = mongoose.model("MessageLog", messageLogSchema);
 
 export default MessageLog;

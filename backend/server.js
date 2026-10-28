@@ -58,9 +58,39 @@ app.use((err, req, res, next) => {
 const PORT = process.env.PORT || 5050;
 const MONGO_URI = process.env.MONGO_URI;
 
+import User from "./models/User.js";
+import Gym from "./models/Gym.js";
+
 // MongoDB Connection
-mongoose.connect(MONGO_URI)
-    .then(() => console.log("MongoDB connected successfully"))
+mongoose.connect(MONGO_URI, { dbName: 'Big_Buddy' })
+    .then(async () => {
+        console.log("MongoDB connected successfully to Big_Buddy");
+        // Ensure default admin & gym profile exists on clean DB
+        try {
+            const adminCount = await User.countDocuments({ role: "admin" });
+            if (adminCount === 0) {
+                await User.create({
+                    name: "BigBuddy Admin",
+                    email: "admin@bigbuddy.com",
+                    password: "admin123",
+                    role: "admin"
+                });
+                console.log("Default Admin seeded: admin@bigbuddy.com (Password: admin123)");
+            }
+            const gym = await Gym.findOne();
+            if (!gym) {
+                await Gym.create({
+                    name: "BigBuddy Fitness",
+                    address: "Main Street, Fitness Complex",
+                    contact: "+91 9876543210",
+                    gmail: "admin@bigbuddy.com"
+                });
+                console.log("Default Gym profile seeded");
+            }
+        } catch (seedErr) {
+            console.error("Auto-seed error:", seedErr);
+        }
+    })
     .catch((err) => console.error("MongoDB connection error:", err));
 
 app.listen(PORT, () => {

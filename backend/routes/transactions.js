@@ -67,8 +67,12 @@ router.post("/", async (req, res) => {
         const { memberID, memberName, amount, paymentMode, planType, description, date } = req.body;
 
         // Verify member exists first if memberID is provided
+        const isObjectId = /^[a-fA-F0-9]{24}$/.test(memberID);
+        const memberQuery = isObjectId ? { $or: [{ _id: memberID }, { memberID }] } : { memberID };
+
+        let memberExists = null;
         if (memberID) {
-            const memberExists = await Member.findById(memberID);
+            memberExists = await Member.findOne(memberQuery);
             if (!memberExists) {
                 return res.status(404).json({ message: "Selected member does not exist." });
             }
@@ -77,7 +81,7 @@ router.post("/", async (req, res) => {
         }
 
         const transaction = new Transaction({
-            memberID,
+            memberID: memberExists ? memberExists._id : (isObjectId ? memberID : undefined),
             memberName,
             amount: Number(amount),
             paymentMode,
@@ -91,7 +95,7 @@ router.post("/", async (req, res) => {
         // Update member balance and membership status if memberID is provided
         // skipMemberUpdate is used when the financials were already handled during member creation/update
         if (memberID && !req.body.skipMemberUpdate) {
-            const member = await Member.findById(memberID);
+            const member = await Member.findOne(memberQuery);
             if (member) {
                 // Update basic financials
                 member.amountPaid = (member.amountPaid || 0) + Number(amount);

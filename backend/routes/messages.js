@@ -3,9 +3,25 @@ import MessageLog from "../models/MessageLog.js";
 
 const router = express.Router();
 
+// Helper to purge messages older than 1 month (30 days)
+const purgeExpiredMessages = async () => {
+    try {
+        const oneMonthAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+        await MessageLog.deleteMany({
+            $or: [
+                { createdAt: { $lt: oneMonthAgo } },
+                { date: { $lt: oneMonthAgo } }
+            ]
+        });
+    } catch (e) {
+        console.error("Auto-delete message history error:", e);
+    }
+};
+
 // Get all message logs (admin use)
 router.get("/", async (req, res) => {
     try {
+        await purgeExpiredMessages();
         const messages = await MessageLog.find().sort({ date: -1 }).limit(100);
         res.json(messages);
     } catch (error) {
@@ -16,6 +32,7 @@ router.get("/", async (req, res) => {
 // Get inbox messages for a specific member (in-app inbox)
 router.get("/inbox/:memberId", async (req, res) => {
     try {
+        await purgeExpiredMessages();
         const { memberId } = req.params;
         const messages = await MessageLog.find({
             memberId: memberId,

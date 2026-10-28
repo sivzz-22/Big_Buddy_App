@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Dimensions, Alert, Pressable, Modal, ActivityIndicator, RefreshControl } from 'react-native';
 import { MaterialCommunityIcons, Ionicons, FontAwesome5 } from '@expo/vector-icons';
-import DateTimePicker from '@react-native-community/datetimepicker';
+import DateTimePicker from '../../../components/DateTimePickerWrapper';
 import { router } from 'expo-router';
 import { useTheme } from '../../../constants/ThemeContext';
 import axios from 'axios';
