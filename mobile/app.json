@@ -12,8 +12,14 @@
     },
     "android": {
       "package": "com.siva.bigbuddy",
+      "versionCode": 1,
+      "permissions": [
+        "CAMERA",
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE"
+      ],
       "adaptiveIcon": {
-        "backgroundColor": "#E6F4FE",
+        "backgroundColor": "#111111",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -40,7 +46,19 @@
       ],
       "@react-native-community/datetimepicker",
       "expo-web-browser",
-      "@react-native-google-signin/google-signin"
+      "@react-native-google-signin/google-signin",
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Allow BigBuddy to access your camera to scan gym attendance QR codes."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Allow BigBuddy to access your photos to upload profile and member pictures."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
