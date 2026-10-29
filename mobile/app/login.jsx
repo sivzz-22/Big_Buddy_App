@@ -1,4 +1,4 @@
-import { View, Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, Alert, Image } from 'react-native';
 import { router, Link } from 'expo-router';
 import React, { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -115,6 +115,9 @@ const Login = () => {
 
   return (
     <View style={styles.container}>
+      <View style={{ alignItems: 'center', marginBottom: 14 }}>
+        <Image source={require('../assets/images/logo.png')} style={{ width: 80, height: 80, borderRadius: 18 }} resizeMode="contain" />
+      </View>
       <Text style={styles.header}>WELCOME BACK</Text>
       <Text style={styles.subHeader}>Sign in to continue</Text>
 

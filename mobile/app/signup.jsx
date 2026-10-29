@@ -1,4 +1,4 @@
-import { View, Text, TextInput, Pressable, StyleSheet, Alert } from 'react-native';
+import { View, Text, TextInput, Pressable, StyleSheet, Alert, Image } from 'react-native';
 import { router, Link } from 'expo-router';
 import React, { useState } from 'react';
 import { Ionicons } from '@expo/vector-icons';
@@ -109,6 +109,9 @@ const Signup = () => {
 
     return (
         <View style={styles.container}>
+            <View style={{ alignItems: 'center', marginBottom: 14 }}>
+                <Image source={require('../assets/images/logo.png')} style={{ width: 80, height: 80, borderRadius: 18 }} resizeMode="contain" />
+            </View>
             <Text style={styles.header}>CREATE ACCOUNT</Text>
             <Text style={styles.subHeader}>Admin Registration (Requires @bigbuddy.com)</Text>
             <Text style={styles.infoText}>Members: Please ask your gym admin to create your account.</Text>

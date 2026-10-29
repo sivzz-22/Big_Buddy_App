@@ -1,4 +1,4 @@
-export const API_URL = 'http://10.231.203.52:5050/api';
+export const API_URL = 'https://bigbuddy-backend.onrender.com/api';
 
 // Google Authentication Client IDs
 // Replace these with your actual Client IDs from Google Cloud Console
