@@ -3,6 +3,15 @@ import dotenv from "dotenv";
 import mongoose from "mongoose";
 import cors from "cors";
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+// Ensure .env is loaded whether run from repo root or backend folder
+dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config();
 
 // Route imports
 import authRoutes from "./routes/auth.js";
@@ -16,8 +25,6 @@ import attendanceRoutes from "./routes/attendance.js";
 import gymRoutes from "./routes/gym.js";
 import messagesRoutes from "./routes/messages.js";
 import dailyLogRoutes from "./routes/dailyLogs.js";
-
-dotenv.config();
 
 const app = express();
 
